@@ -1,0 +1,49 @@
+# Go
+/bin/
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go vendor
+/vendor/
+
+# Node
+node_modules/
+
+# Vite/前端构建
+dist/
+public/
+
+# 前端缓存
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# 环境变量
+.env
+.env.*
+
+# 其他
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 本地配置文件
+config.yaml
