@@ -8,7 +8,6 @@ import (
 	"octoops/db"
 	"octoops/model"
 	"octoops/service"
-	"strings"
 	"time"
 )
 
@@ -212,16 +211,9 @@ func SyncAllJobStatus() {
 			if result.FinishTime != "" {
 				db.DB.Model(&task).Update("finish_time", result.FinishTime)
 			}
-			// 新变为FAILED，alert_group不为空则通知
+			// 状态变为FAILED，alert_group不为空则通知
 			if oldStatus != "FAILED" && status == "FAILED" {
 				service.SendTaskAlert(task, status)
-			}
-			// 新变为SUCCEEDED，alert_group不为空则通知
-			if oldStatus != "SUCCEEDED" && status == "SUCCEEDED" {
-				if task.AlertGroup != "" {
-					var groupIDs []string = strings.Split(task.AlertGroup, ",")
-					go service.SendDingTalkAlertToGroups(task.Name, task.ID, time.Now(), "作业状态变为SUCCEEDED", groupIDs)
-				}
 			}
 		}
 	}
