@@ -19,10 +19,8 @@ RUN go mod download
 
 COPY . .
 
-# 将前端构建产物复制到后端静态目录
-RUN rm -rf web/public && \
-    mkdir -p web/public && \
-    cp -r octoops-frontend/dist/* web/public/
+# 复制前端产物到 web/public
+COPY --from=frontend-build /app/frontend/dist /app/web/public
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o octoops
 
@@ -37,4 +35,4 @@ COPY --from=backend-build /app/web/public /app/web/public
 
 EXPOSE 8080
 
-CMD ["./octoops"] 
+CMD ["./octoops"]
