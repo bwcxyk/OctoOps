@@ -1,8 +1,8 @@
 import axios from 'axios'
 
 // 获取所有安全组配置
-export function getAliyunSGConfigs() {
-  return axios.get('/api/aliyun-sg-configs')
+export function getAliyunSGConfigs(params = {}) {
+  return axios.get('/api/aliyun-sg-configs', { params })
 }
 
 // 新增安全组配置

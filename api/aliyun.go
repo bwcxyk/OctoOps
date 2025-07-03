@@ -5,15 +5,30 @@ import (
 	"octoops/model"
 	"octoops/db"
 	"octoops/service"
+	"octoops/util"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"strings"
+	"encoding/base64"
 )
 
 // 获取所有安全组配置
 func ListAliyunSGConfigs(c *gin.Context) {
 	var configs []model.AliyunSGConfig
-	db.DB.Order("created_at desc").Find(&configs)
+	status := c.Query("status")
+	accessKey := c.Query("access_key")
+	name := c.Query("name")
+	query := db.DB.Order("created_at desc")
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if accessKey != "" {
+		query = query.Where("access_key = ?", accessKey)
+	}
+	if name != "" {
+		query = query.Where("name LIKE ?", "%"+name+"%")
+	}
+	query.Find(&configs)
 	c.JSON(http.StatusOK, configs)
 }
 
@@ -24,6 +39,13 @@ func CreateAliyunSGConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// 只加密 SK
+	sk, err := util.EncryptAES(cfg.AccessSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SK加密失败: " + err.Error()})
+		return
+	}
+	cfg.AccessSecret = sk
 	db.DB.Create(&cfg)
 	c.JSON(http.StatusOK, cfg)
 }
@@ -36,12 +58,37 @@ func UpdateAliyunSGConfig(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	var req model.AliyunSGConfig
+	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.DB.Model(&cfg).Updates(req)
+	// 只更新status字段时，直接更新
+	if len(req) == 1 {
+		if status, ok := req["status"]; ok {
+			db.DB.Model(&cfg).Update("status", status)
+			c.JSON(http.StatusOK, cfg)
+			return
+		}
+	}
+	// 兼容原有逻辑
+	var reqStruct model.AliyunSGConfig
+	if err := c.ShouldBindJSON(&reqStruct); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if reqStruct.AccessSecret != "" {
+		_, decodeErr := base64.StdEncoding.DecodeString(reqStruct.AccessSecret)
+		if decodeErr != nil || len(reqStruct.AccessSecret) < 32 {
+			sk, err := util.EncryptAES(reqStruct.AccessSecret)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "SK加密失败: " + err.Error()})
+				return
+			}
+			reqStruct.AccessSecret = sk
+		}
+	}
+	db.DB.Model(&cfg).Updates(reqStruct)
 	c.JSON(http.StatusOK, cfg)
 }
 

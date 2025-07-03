@@ -14,6 +14,9 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"octoops/model"
 	"octoops/db"
+	credential "github.com/aliyun/credentials-go/credentials"
+	"octoops/util"
+	"log"
 )
 
 // 获取当前公网IP
@@ -42,17 +45,31 @@ func GetAliyunSGConfig(db *gorm.DB) (*model.AliyunSGConfig, error) {
 	return &cfg, nil
 }
 
-// 初始化ECS客户端（官方示例风格）
+// 初始化ECS客户端（无AK方式，推荐）
 func Initialization(cfg *model.AliyunSGConfig) (*ecs.Client, error) {
-	openCfg := &openapi.Config{}
-	openCfg.AccessKeyId = tea.String(cfg.AccessKey)
-	openCfg.AccessKeySecret = tea.String(cfg.AccessSecret)
-	openCfg.RegionId = tea.String(cfg.RegionId)
+	ak := cfg.AccessKey
+	sk, err := util.DecryptAES(cfg.AccessSecret)
+	if err != nil {
+		return nil, err
+	}
+	config := new(credential.Config).
+		SetType("access_key").
+		SetAccessKeyId(ak).
+		SetAccessKeySecret(sk)
+	cred, err := credential.NewCredential(config)
+	if err != nil {
+		return nil, err
+	}
+	openCfg := &openapi.Config{
+		Credential: cred,
+		RegionId: tea.String(cfg.RegionId),
+	}
 	return ecs.NewClient(openCfg)
 }
 
 // 授权安全组（官方示例风格）
 func AuthorizeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, port int, sourceCidrIp string) error {
+	log.Printf("[Authorize] IP: %s, Port: %d, SecurityGroup: %s", sourceCidrIp, port, cfg.SecurityGroupId)
 	req := &ecs.AuthorizeSecurityGroupRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
 	req.SecurityGroupId = tea.String(cfg.SecurityGroupId)
@@ -61,19 +78,27 @@ func AuthorizeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, port 
 	req.NicType = tea.String("internet")
 	req.Policy = tea.String("accept")
 	req.Priority = tea.String("1")
-	req.SourceCidrIp = tea.String(fmt.Sprintf("%s/32", sourceCidrIp))
+	// 统一加/32
+	if !strings.Contains(sourceCidrIp, "/") {
+		sourceCidrIp = sourceCidrIp + "/32"
+	}
+	req.SourceCidrIp = tea.String(sourceCidrIp)
 	_, err := client.AuthorizeSecurityGroup(req)
 	return err
 }
 
-// 撤销安全组授权（官方示例风格）
-func RevokeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, port int, sourceCidrIp string) error {
+// 撤销安全组授权，支持端口段
+func RevokeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, portRange string, sourceCidrIp string) error {
+	if !strings.Contains(sourceCidrIp, "/") {
+		sourceCidrIp = sourceCidrIp + "/32"
+	}
+	log.Printf("[Revoke] IP: %s, PortRange: %s, SecurityGroup: %s", sourceCidrIp, portRange, cfg.SecurityGroupId)
 	req := &ecs.RevokeSecurityGroupRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
 	req.SecurityGroupId = tea.String(cfg.SecurityGroupId)
 	req.IpProtocol = tea.String("tcp")
-	req.PortRange = tea.String(fmt.Sprintf("%d/%d", port, port))
-	req.SourceCidrIp = tea.String(fmt.Sprintf("%s/32", sourceCidrIp))
+	req.PortRange = tea.String(portRange)
+	req.SourceCidrIp = tea.String(sourceCidrIp)
 	_, err := client.RevokeSecurityGroup(req)
 	return err
 }
@@ -112,29 +137,37 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("获取公网IP失败: %v", err)
 	}
-	if newIP == oldIP {
-		return nil // 无需更新
+
+	// 1. 撤销oldIP下所有tcp规则
+	if oldIP != "" {
+		resp, err := DescribeSecurityGroupAttribute(client, cfg)
+		if err != nil {
+			if strings.Contains(err.Error(), "StatusCode: 403") || strings.Contains(err.Error(), "Forbidden.RAM") {
+				return fmt.Errorf("没有权限查询安全组规则，请联系管理员为该账号授权安全组相关权限（ecs:DescribeSecurityGroupAttribute 等）")
+			}
+			return fmt.Errorf("查询安全组规则失败: %v", err)
+		}
+		for _, perm := range resp.Body.Permissions.Permission {
+			if tea.StringValue(perm.SourceCidrIp) == fmt.Sprintf("%s/32", oldIP) && strings.ToLower(tea.StringValue(perm.IpProtocol)) == "tcp" {
+				portRange := tea.StringValue(perm.PortRange)
+				if err := RevokeSecurityGroup(client, cfg, portRange, oldIP); err != nil {
+					if strings.Contains(err.Error(), "InvalidSecurityGroupRule.RuleNotExist") {
+						continue
+					}
+					return fmt.Errorf("端口范围%s撤销旧授权失败: %v", portRange, err)
+				}
+			}
+		}
 	}
 
-	// 授权新IP
+	// 2. 授权当前IP所有端口
 	for _, port := range portList {
 		if err := AuthorizeSecurityGroup(client, cfg, port, newIP); err != nil {
 			return fmt.Errorf("端口%d授权失败: %v", port, err)
 		}
 	}
-	// 撤销旧IP
-	if oldIP != "" {
-		for _, port := range portList {
-			if err := RevokeSecurityGroup(client, cfg, port, oldIP); err != nil {
-				if strings.Contains(err.Error(), "InvalidSecurityGroupRule.RuleNotExist") {
-					// 规则不存在，跳过
-					continue
-				}
-				return fmt.Errorf("端口%d撤销旧授权失败: %v", port, err)
-			}
-		}
-	}
-	// 更新last_ip和last_ip_updated_at
+
+	// 3. 更新last_ip和last_ip_updated_at
 	db.Model(cfg).Updates(map[string]interface{}{
 		"last_ip": newIP,
 		"last_ip_updated_at": time.Now(),
@@ -170,7 +203,7 @@ func GetSecurityGroupDetailString(client *ecs.Client, cfg *model.AliyunSGConfig)
 func SyncAllECSSecurityGroups() error {
 	var configs []model.AliyunSGConfig
 	dbIns := db.DB
-	dbIns.Find(&configs)
+	dbIns.Where("status != 0").Find(&configs)
 	for _, cfg := range configs {
 		ins := dbIns.Session(&gorm.Session{})
 		ins = ins.Model(&model.AliyunSGConfig{}).Where("id = ?", cfg.ID)

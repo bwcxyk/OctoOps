@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -40,8 +41,13 @@ type SeatunnelConfig struct {
 	BaseURL string `yaml:"base_url"`
 }
 
+type AliyunConfig struct {
+	AesKey string `yaml:"aes_key"`
+}
+
 type OctoopsConfig struct {
-	Mail MailConfig `yaml:"mail"`
+	Mail    MailConfig    `yaml:"mail"`
+	Aliyun  AliyunConfig  `yaml:"aliyun"`
 	// 预留字段，后续可扩展
 }
 
@@ -56,7 +62,32 @@ var (
 	SeatunnelJobStatusSyncInterval time.Duration
 	PostgresDSN                    string
 	mailConfig                     MailConfig
+	aliyunAesKey                   string
 )
+
+func overrideStringField(envVar string, field *string) {
+	if v := os.Getenv(envVar); v != "" {
+		*field = v
+	}
+}
+
+func overrideIntField(envVar string, field *int) {
+	if v := os.Getenv(envVar); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			*field = n
+		}
+	}
+}
+
+func overrideBoolField(envVar string, field *bool) {
+	if v := os.Getenv(envVar); v != "" {
+		if v == "true" || v == "1" {
+			*field = true
+		} else if v == "false" || v == "0" {
+			*field = false
+		}
+	}
+}
 
 func InitConfig() {
 	cfg := Config{}
@@ -67,14 +98,29 @@ func InitConfig() {
 		}
 	}
 
-	if v := os.Getenv("SEATUNNEL_BASE_URL"); v != "" {
-		cfg.Seatunnel.BaseURL = v
-	}
-	if v := os.Getenv("POSTGRES_DSN"); v != "" {
-		PostgresDSN = v
-	} else {
-		PostgresDSN = cfg.Postgres.DSN()
-	}
+	// Postgres
+	overrideStringField("POSTGRES_HOST", &cfg.Postgres.Host)
+	overrideStringField("POSTGRES_USER", &cfg.Postgres.User)
+	overrideStringField("POSTGRES_PASSWORD", &cfg.Postgres.Password)
+	overrideStringField("POSTGRES_DBNAME", &cfg.Postgres.DBName)
+	overrideIntField("POSTGRES_PORT", &cfg.Postgres.Port)
+	overrideStringField("POSTGRES_SSLMODE", &cfg.Postgres.SSLMode)
+	overrideStringField("POSTGRES_TIMEZONE", &cfg.Postgres.TimeZone)
+
+	// Seatunnel
+	overrideStringField("SEATUNNEL_BASE_URL", &cfg.Seatunnel.BaseURL)
+
+	// Octoops.Mail
+	overrideStringField("OCTOOPS_MAIL_SMTP_ADDRESS", &cfg.Octoops.Mail.SMTPAddress)
+	overrideIntField("OCTOOPS_MAIL_SMTP_PORT", &cfg.Octoops.Mail.SMTPPort)
+	overrideStringField("OCTOOPS_MAIL_SMTP_USER", &cfg.Octoops.Mail.SMTPUser)
+	overrideStringField("OCTOOPS_MAIL_SMTP_PASSWORD", &cfg.Octoops.Mail.SMTPPassword)
+	overrideStringField("OCTOOPS_MAIL_DISPLAY_NAME", &cfg.Octoops.Mail.DisplayName)
+	overrideBoolField("OCTOOPS_MAIL_ENABLE", &cfg.Octoops.Mail.Enable)
+	overrideBoolField("OCTOOPS_MAIL_SSL", &cfg.Octoops.Mail.SSL)
+
+	// Octoops.Aliyun
+	overrideStringField("OCTOOPS_ALIYUN_AES_KEY", &cfg.Octoops.Aliyun.AesKey)
 
 	// 校验必填项
 	if cfg.Seatunnel.BaseURL == "" {
@@ -85,11 +131,15 @@ func InitConfig() {
 	}
 
 	SeatunnelBaseURL = cfg.Seatunnel.BaseURL
-
-	// 邮件配置
+	PostgresDSN = cfg.Postgres.DSN()
 	mailConfig = cfg.Octoops.Mail
+	aliyunAesKey = cfg.Octoops.Aliyun.AesKey
 }
 
 func GetMailConfig() MailConfig {
 	return mailConfig
+}
+
+func GetAliyunAesKey() string {
+	return aliyunAesKey
 }

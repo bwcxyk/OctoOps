@@ -1,24 +1,75 @@
 <template>
   <div style="padding: 24px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <!-- 查询条件区域 -->
+    <el-card class="search-card" shadow="never" style="margin-bottom: 12px;">
+      <el-form :inline="true" class="search-form">
+        <el-form-item label="名称">
+          <el-input v-model="searchForm.name" placeholder="名称" clearable @keyup.enter="handleSearch" />
+        </el-form-item>
+        <el-form-item label="AccessKey">
+          <el-input v-model="searchForm.access_key" placeholder="AccessKey" clearable @keyup.enter="handleSearch" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 120px">
+            <el-option label="启用" :value="1" />
+            <el-option label="禁用" :value="0" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 操作按钮区域 -->
+    <el-card class="operation-card" shadow="never" style="margin-bottom: 12px;">
       <el-button type="primary" @click="openDialog()">新增</el-button>
-    </div>
+      <el-tooltip placement="right" effect="light">
+        <template #content>
+          <div style="max-width: 320px;">
+            <div>RAM子账号需要以下权限才能正常操作安全组：</div>
+            <pre style="background: #f6f8fa; border-radius: 4px; padding: 8px; margin: 8px 0 0 0; font-size: 13px;">
+  ecs:AuthorizeSecurityGroup
+  ecs:AuthorizeSecurityGroupEgress
+  ecs:ModifySecurityGroupEgressRule
+  ecs:ModifySecurityGroupRule
+  ecs:RevokeSecurityGroup
+  ecs:RevokeSecurityGroupEgress
+  ecs:DescribeSecurityGroupAttribute
+            </pre>
+          </div>
+        </template>
+        <el-icon style="color: #909399; margin-left: 8px; cursor: pointer; vertical-align: middle;">
+          <InfoFilled />
+        </el-icon>
+      </el-tooltip>
+    </el-card>
     <el-table :data="configs" style="width: 100%" v-loading="loading" empty-text="暂无数据">
       <el-table-column type="index" label="序号" width="60" />
-      <el-table-column prop="account_name" label="账号名" width="120" />
+      <el-table-column prop="name" label="名称" width="120" />
       <el-table-column prop="access_key" label="AccessKey" width="220" />
-      <el-table-column prop="region_id" label="RegionId" width="120" />
       <el-table-column prop="security_group_id" label="安全组ID" width="200" />
       <el-table-column prop="port_list" label="端口列表" width="150" show-overflow-tooltip />
-      <el-table-column prop="last_ip" label="最近授权IP" width="140" />
-      <el-table-column prop="last_ip_updated_at" label="IP更新时间" width="160">
+      <el-table-column prop="last_ip" label="上次授权IP" width="140" />
+      <el-table-column prop="last_ip_updated_at" label="同步时间" width="160">
         <template #default="scope">
           <span>{{ formatDateTime(scope.row.last_ip_updated_at) }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="updated_at" label="配置更新时间" width="160">
+      <el-table-column prop="updated_at" label="更新时间" width="160">
         <template #default="scope">
           <span>{{ formatDateTime(scope.row.updated_at) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="status" label="状态" width="100">
+        <template #default="scope">
+          <el-switch
+            v-model="scope.row.status"
+            :active-value="1"
+            :inactive-value="0"
+            @change="handleStatusChange(scope.row)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="操作" width="200">
@@ -38,7 +89,7 @@
           <el-input v-model="editConfig.access_key" />
         </el-form-item>
         <el-form-item label="AccessSecret" prop="access_secret">
-          <el-input v-model="editConfig.access_secret" type="password" show-password />
+          <el-input v-model="editConfig.access_secret" type="password" show-password :key="inputKey" />
         </el-form-item>
         <el-form-item label="RegionId" prop="region_id">
           <el-input v-model="editConfig.region_id" />
@@ -62,6 +113,7 @@
 import { ref, onMounted } from 'vue'
 import { getAliyunSGConfigs, createAliyunSGConfig, updateAliyunSGConfig, deleteAliyunSGConfig, syncAliyunSGConfigs, syncAliyunSGConfig } from '../api/aliyun'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 
 const configs = ref([])
 const loading = ref(false)
@@ -76,6 +128,8 @@ const rules = {
   security_group_id: [{ required: true, message: '安全组ID必填', trigger: 'blur' }],
   port_list: [{ required: true, message: '端口列表必填', trigger: 'blur' }],
 }
+const inputKey = ref(Date.now())
+const searchForm = ref({ name: '', access_key: '', status: '' })
 
 function fetchConfigs() {
   loading.value = true
@@ -95,6 +149,7 @@ function openDialog(row = null) {
       account_name: '', access_key: '', access_secret: '', region_id: '', security_group_id: '', port_list: ''
     }
   }
+  inputKey.value = Date.now()
   dialogVisible.value = true
 }
 
@@ -164,5 +219,35 @@ function shortPortList(portList) {
   return portList.length > 10 ? portList.slice(0, 10) + '...' : portList
 }
 
-onMounted(fetchConfigs)
+function handleSearch() {
+  loading.value = true
+  const params = {}
+  if (searchForm.value.name && searchForm.value.name.trim() !== '') params.name = searchForm.value.name.trim()
+  if (searchForm.value.status !== '' && searchForm.value.status !== undefined) params.status = searchForm.value.status
+  if (searchForm.value.access_key && searchForm.value.access_key.trim() !== '') params.access_key = searchForm.value.access_key.trim()
+  getAliyunSGConfigs(params).then(res => {
+    configs.value = res.data
+    loading.value = false
+  }).catch(() => {
+    loading.value = false
+  })
+}
+
+function handleReset() {
+  searchForm.value = { name: '', access_key: '', status: '' }
+  // 不自动查询
+}
+
+function handleStatusChange(row) {
+  updateAliyunSGConfig(row.id, { status: row.status }).then(() => {
+    ElMessage.success('状态更新成功')
+    handleSearch()
+  }).catch(() => {
+    ElMessage.error('状态更新失败')
+    // 回滚状态
+    row.status = row.status === 1 ? 0 : 1
+  })
+}
+
+onMounted(handleSearch)
 </script> 
