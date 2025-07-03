@@ -31,6 +31,8 @@ FROM debian:bullseye-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=backend-build /app/octoops /app/
 COPY --from=backend-build /app/config.yaml /app/config.yaml
 COPY --from=backend-build /app/web/public /app/web/public
