@@ -58,10 +58,11 @@ function fetchCustomTasks() {
 }
 
 function toggleTask(row) {
-  const url = row.status === 1
-    ? `/api/custom-tasks/${row.id}/enable`
-    : `/api/custom-tasks/${row.id}/disable`
-  fetch(url, { method: 'POST' })
+  fetch(`/api/custom-tasks/${row.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: row.status })
+  })
     .then(res => res.json())
     .then(() => {
       ElMessage.success(row.status === 1 ? '已启用' : '已禁用')

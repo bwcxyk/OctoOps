@@ -67,8 +67,8 @@ const routes = [
   },
   {
     path: '/task/timer',
-    component: () => import('./views/TaskTimer.vue'),
-    name: 'TaskTimer'
+    component: () => import('./views/CustomTask.vue'),
+    name: 'CustomTask'
   },
   {
     path: '/alert-group',

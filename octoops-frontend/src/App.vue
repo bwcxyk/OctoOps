@@ -84,7 +84,7 @@ function handleMenuSelect(index) {
   } else if (index === 'scheduler') {
     router.push({ name: 'Scheduler' })
   } else if (index === 'task-timer') {
-    router.push({ name: 'TaskTimer' })
+    router.push({ name: 'CustomTask' })
   } else if (index === 'tasklog') {
     router.push({ name: 'TaskLog' })
   } else if (index === 'ecs-security-group') {

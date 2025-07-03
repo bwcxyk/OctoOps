@@ -40,21 +40,25 @@ func UpdateCustomTask(c *gin.Context) {
         c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
         return
     }
-    var req model.CustomTask
+    var req map[string]interface{}
     if err := c.ShouldBindJSON(&req); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
     db.DB.Model(&task).Updates(req)
     scheduler.DisableCustomTask(fmt.Sprintf("custom_%s", id))
-    scheduler.RegisterCustomTask(
-        fmt.Sprintf("custom_%s", id),
-        req.Name,
-        req.CustomType,
-        req.CronExpr,
-        req.Status == 1,
-        scheduler.GetJobFuncByType(req.CustomType),
-    )
+    var updatedTask model.CustomTask
+    db.DB.First(&updatedTask, id)
+    if updatedTask.Status == 1 {
+        scheduler.RegisterCustomTask(
+            fmt.Sprintf("custom_%s", id),
+            updatedTask.Name,
+            updatedTask.CustomType,
+            updatedTask.CronExpr,
+            true,
+            scheduler.GetJobFuncByType(updatedTask.CustomType),
+        )
+    }
     c.JSON(http.StatusOK, task)
 }
 
@@ -65,23 +69,9 @@ func DeleteCustomTask(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-func EnableCustomTask(c *gin.Context) {
-    id := c.Param("id")
-    scheduler.EnableCustomTask(fmt.Sprintf("custom_%s", id))
-    c.JSON(http.StatusOK, gin.H{"message": "已启用"})
-}
-
-func DisableCustomTask(c *gin.Context) {
-    id := c.Param("id")
-    scheduler.DisableCustomTask(fmt.Sprintf("custom_%s", id))
-    c.JSON(http.StatusOK, gin.H{"message": "已禁用"})
-}
-
 func RegisterCustomTaskRoutes(r *gin.RouterGroup) {
     r.GET("/custom-tasks", ListCustomTasks)
     r.POST("/custom-tasks", CreateCustomTask)
     r.PUT("/custom-tasks/:id", UpdateCustomTask)
     r.DELETE("/custom-tasks/:id", DeleteCustomTask)
-    r.POST("/custom-tasks/:id/enable", EnableCustomTask)
-    r.POST("/custom-tasks/:id/disable", DisableCustomTask)
 } 
