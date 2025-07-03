@@ -19,8 +19,10 @@ RUN go mod download
 
 COPY . .
 
-# 复制前端产物到 web/public
 COPY --from=frontend-build /app/web/public /app/web/public
+
+# 复制 example 文件为 config.yaml
+COPY config.yaml.example /app/config.yaml
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o octoops
 
