@@ -1,9 +1,7 @@
-package model
+package alert
 
 import "time"
 
-// 通知管理表
-// CREATE TABLE alerts (...)
 type Alert struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Name      string    `gorm:"column:name;size:255" json:"name"`           // 通知名称
@@ -14,4 +12,4 @@ type Alert struct {
 	TemplateID uint     `json:"template_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-} 
+}

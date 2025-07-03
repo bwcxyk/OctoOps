@@ -7,7 +7,9 @@ import (
 	"octoops/config"
 	"octoops/db"
 	"octoops/model"
-	"octoops/service"
+	seatunnelModel "octoops/model/seatunnel"
+	seatunnelService "octoops/service/seatunnel"
+	aliyunService "octoops/service/aliyun"
 	"time"
 )
 
@@ -53,7 +55,7 @@ func InitScheduler() {
 
 // 加载所有活跃的定时任务
 func loadActiveTasks() {
-	var tasks []model.Task
+	var tasks []seatunnelModel.Task
 	db.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks)
 
 	for _, task := range tasks {
@@ -64,7 +66,7 @@ func loadActiveTasks() {
 }
 
 // 添加定时任务
-func AddTask(task model.Task) error {
+func AddTask(task seatunnelModel.Task) error {
 	if task.CronExpr == "" {
 		return fmt.Errorf("cron表达式不能为空")
 	}
@@ -113,12 +115,15 @@ func reloadTasks() {
 	// 清空映射
 	taskEntryMap = make(map[uint]cron.EntryID)
 
+	// 重新加载自定义任务
+	loadCustomTasksFromDB()
+
 	// 重新加载所有活跃任务
 	loadActiveTasks()
 }
 
 // 执行任务
-func executeTask(task model.Task) {
+func executeTask(task seatunnelModel.Task) {
 	log.Printf("开始执行定时任务: ID=%d, 名称=%s", task.ID, task.Name)
 
 	// 更新最后运行时间
@@ -126,12 +131,12 @@ func executeTask(task model.Task) {
 	db.DB.Model(&task).Update("last_run_time", now)
 
 	// 调用提交作业服务
-	respBody, err := service.SubmitJobInternal(task.ID, false) // 默认不使用savepoint
+	respBody, err := seatunnelService.SubmitJobInternal(task.ID, false) // 默认不使用savepoint
 	if err != nil {
 		log.Printf("执行定时任务失败: ID=%d, 名称=%s, 错误=%v", task.ID, task.Name, err)
 	} else {
 		// 写入作业日志
-		service.WriteTaskLog(task, respBody)
+		seatunnelService.WriteTaskLog(task, respBody)
 		log.Printf("定时任务执行成功: ID=%d, 名称=%s", task.ID, task.Name)
 	}
 }
@@ -200,12 +205,12 @@ func StartJobStatusSync() {
 
 func SyncAllJobStatus() {
 	log.Printf("[Scheduler] 开始同步作业状态")
-	var tasks []model.Task
+	var tasks []seatunnelModel.Task
 	db.DB.Find(&tasks)
 	for _, task := range tasks {
 		if task.JobID != "" {
 			oldStatus := task.JobStatus
-			result := service.QuerySeatunnelJobStatus(task.JobID)
+			result := seatunnelService.QuerySeatunnelJobStatus(task.JobID)
 			status := result.JobStatus
 			db.DB.Model(&task).Update("job_status", status)
 			if result.FinishTime != "" {
@@ -213,7 +218,7 @@ func SyncAllJobStatus() {
 			}
 			// 状态变为FAILED，alert_group不为空则通知
 			if oldStatus != "FAILED" && status == "FAILED" {
-				service.SendTaskAlert(task, status)
+				seatunnelService.SendTaskAlert(task, status)
 			}
 		}
 	}
@@ -231,6 +236,7 @@ func RegisterCustomTask(id, name, typ, spec string, enabled bool, job func() str
 		Job:     job,
 	}
 	customTasks[id] = task
+	log.Printf("[Scheduler] RegisterCustomTask: id=%s, name=%s, enabled=%v, spec=%s", id, name, enabled, spec)
 	if enabled {
 		addCustomTaskToCron(task)
 	}
@@ -262,6 +268,9 @@ func addCustomTaskToCron(task *CustomTask) {
 	if err == nil {
 		task.EntryID = entryID
 		task.NextRun = cronScheduler.Entry(entryID).Next
+		log.Printf("[Scheduler] addCustomTaskToCron: 成功添加自定义任务到调度器 id=%s, entryID=%d, nextRun=%v", task.ID, entryID, task.NextRun)
+	} else {
+		log.Printf("[Scheduler] addCustomTaskToCron: 添加自定义任务失败 id=%s, err=%v", task.ID, err)
 	}
 }
 
@@ -327,7 +336,9 @@ func ListCustomTasks() []*CustomTask {
 func loadCustomTasksFromDB() {
 	var tasks []model.CustomTask
 	db.DB.Find(&tasks)
+	log.Printf("[Scheduler] 数据库加载自定义任务数量: %d", len(tasks))
 	for _, t := range tasks {
+		log.Printf("[Scheduler] 尝试注册自定义任务: id=%d, name=%s, status=%d, cron=%s", t.ID, t.Name, t.Status, t.CronExpr)
 		RegisterCustomTask(
 			fmt.Sprintf("custom_%d", t.ID),
 			t.Name,
@@ -343,7 +354,7 @@ func GetJobFuncByType(customType string) func() string {
 	switch customType {
 	case "ecs_sg_sync":
 		return func() string {
-			err := service.SyncAllECSSecurityGroups()
+			err := aliyunService.SyncAllECSSecurityGroups()
 			if err != nil {
 				return "ECS安全组同步失败: " + err.Error()
 			}

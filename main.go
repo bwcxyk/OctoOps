@@ -7,26 +7,29 @@ import (
 	"octoops/config"
 	"octoops/db"
 	"octoops/scheduler"
-	"octoops/service"
+	seatunnelApi "octoops/api/seatunnel"
+	aliyunApi "octoops/api/aliyun"
+	alertApi "octoops/api/alert"
+	alertService "octoops/service/alert"
 )
 
 func main() {
 	config.InitConfig()                                       // 初始化配置
 	db.Init()                                                 // 初始化数据库
 	scheduler.InitScheduler()                                 // 初始化定时任务
-	service.InitEmailConfigFromStruct(config.GetMailConfig()) // 初始化邮件配置
+	alertService.InitEmailConfigFromStruct(config.GetMailConfig()) // 初始化邮件配置
 
 	r := gin.Default()
 
 	// API路由组
 	apiGroup := r.Group("/api")
-	api.RegisterTaskRoutes(apiGroup)
-	api.RegisterAlertRoutes(apiGroup)
-	api.RegisterAliyunRoutes(apiGroup)
+	seatunnelApi.RegisterTaskRoutes(apiGroup)
+	alertApi.RegisterAlertRoutes(apiGroup)
+	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	api.RegisterCustomTaskRoutes(apiGroup)
-	api.RegisterAlertGroupRoutes(apiGroup)
-	api.RegisterAlertGroupMemberRoutes(apiGroup)
-	api.RegisterAlertTemplateRoutes(apiGroup)
+	alertApi.RegisterAlertGroupRoutes(apiGroup)
+	alertApi.RegisterAlertGroupMemberRoutes(apiGroup)
+	alertApi.RegisterAlertTemplateRoutes(apiGroup)
 
 	// 静态资源托管
 	r.Static("/assets", "./web/public/assets")

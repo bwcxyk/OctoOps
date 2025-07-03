@@ -1,10 +1,10 @@
-package api
+package aliyun
 
 import (
 	"net/http"
-	"octoops/model"
 	"octoops/db"
-	"octoops/service"
+	aliyunModel "octoops/model/aliyun"
+	aliyunService "octoops/service/aliyun"
 	"octoops/util"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,7 +14,7 @@ import (
 
 // 获取所有安全组配置
 func ListAliyunSGConfigs(c *gin.Context) {
-	var configs []model.AliyunSGConfig
+	var configs []aliyunModel.AliyunSGConfig
 	status := c.Query("status")
 	accessKey := c.Query("access_key")
 	name := c.Query("name")
@@ -34,7 +34,7 @@ func ListAliyunSGConfigs(c *gin.Context) {
 
 // 新增安全组配置
 func CreateAliyunSGConfig(c *gin.Context) {
-	var cfg model.AliyunSGConfig
+	var cfg aliyunModel.AliyunSGConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -53,7 +53,7 @@ func CreateAliyunSGConfig(c *gin.Context) {
 // 更新安全组配置
 func UpdateAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg model.AliyunSGConfig
+	var cfg aliyunModel.AliyunSGConfig
 	if err := db.DB.First(&cfg, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
@@ -72,7 +72,7 @@ func UpdateAliyunSGConfig(c *gin.Context) {
 		}
 	}
 	// 兼容原有逻辑
-	var reqStruct model.AliyunSGConfig
+	var reqStruct aliyunModel.AliyunSGConfig
 	if err := c.ShouldBindJSON(&reqStruct); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -95,21 +95,21 @@ func UpdateAliyunSGConfig(c *gin.Context) {
 // 删除安全组配置
 func DeleteAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	db.DB.Delete(&model.AliyunSGConfig{}, id)
+	db.DB.Delete(&aliyunModel.AliyunSGConfig{}, id)
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // 单条同步安全组端口到阿里云
 func SyncAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg model.AliyunSGConfig
+	var cfg aliyunModel.AliyunSGConfig
 	if err := db.DB.First(&cfg, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	dbIns := db.DB.Session(&gorm.Session{})
-	dbIns = dbIns.Model(&model.AliyunSGConfig{}).Where("id = ?", cfg.ID)
-	err := service.UpdateSecurityGroupIfIPChanged(dbIns)
+	dbIns = dbIns.Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
+	err := aliyunService.UpdateSecurityGroupIfIPChanged(dbIns)
 	if err != nil {
 		if strings.Contains(err.Error(), "InvalidSecurityGroupId.NotFound") {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "找不到安全组，请检查安全组ID、Region和AK/SK配置是否正确。"})

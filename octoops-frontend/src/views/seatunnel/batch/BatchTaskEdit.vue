@@ -8,7 +8,7 @@
         <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入任务描述" />
       </el-form-item>
       <el-form-item label="状态">
-        <el-switch v-model="form.status" :active-value="'active'" :inactive-value="'inactive'" />
+        <el-switch v-model="form.status" :active-value="1" :inactive-value="0" />
       </el-form-item>
       <el-form-item label="Cron表达式" prop="cron_expr">
         <el-input v-model="form.cron_expr" placeholder="秒 分 时 日 月 周" />
@@ -46,7 +46,7 @@ const form = ref({
   cron_expr: '',
   config: '',
   config_format: 'json',
-  status: 'active',
+  status: 1,
   task_type: 'batch',
 })
 const formRef = ref()

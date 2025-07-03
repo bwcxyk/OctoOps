@@ -1,9 +1,8 @@
-package model
+package aliyun
 
 import "time"
 
 // 阿里云安全组配置表
-// CREATE TABLE aliyun_sg_config (...)
 type AliyunSGConfig struct {
 	ID                uint      `gorm:"primaryKey" json:"id"`
 	Name              string    `gorm:"column:name;size:255" json:"name"`
@@ -17,4 +16,4 @@ type AliyunSGConfig struct {
 	LastIPUpdatedAt *time.Time `gorm:"column:last_ip_updated_at" json:"last_ip_updated_at"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-}
+} 

@@ -6,6 +6,9 @@ import (
 	"gorm.io/gorm"
 	"octoops/config"
 	"octoops/model"
+	aliyunModel "octoops/model/aliyun"
+	seatunnelModel "octoops/model/seatunnel"
+	alertModel "octoops/model/alert"
 )
 
 var DB *gorm.DB
@@ -19,13 +22,13 @@ func Init() {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
 	DB.AutoMigrate(
-		&model.Task{},
+		&seatunnelModel.Task{},
 		&model.TaskLog{},
-		&model.AliyunSGConfig{},
-		&model.Alert{},
+		&aliyunModel.AliyunSGConfig{},
+		&alertModel.Alert{},
+		&alertModel.AlertGroup{},
+		&alertModel.AlertGroupMember{},
+		&alertModel.AlertTemplate{},
 		&model.CustomTask{},
-		&model.AlertGroup{},
-		&model.AlertGroupMember{},
-		&model.AlertTemplate{},
 	)
 }
