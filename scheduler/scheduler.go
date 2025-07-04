@@ -87,7 +87,8 @@ func AddTask(task seatunnelModel.EtlTask) error {
 	// 保存任务ID到entry ID的映射
 	taskEntryMap[task.ID] = entryID
 	// 注册到 etlTasksMap
-	etlTasksMap[task.ID] = &task
+	t := task // 创建副本
+	etlTasksMap[task.ID] = &t
 
 	log.Printf("成功添加ETL定时任务: ID=%d, 任务名称=%s, Cron表达式=%s", entryID, task.Name, task.CronExpr)
 	return nil

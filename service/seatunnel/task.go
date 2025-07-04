@@ -102,7 +102,7 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	body, _ := io.ReadAll(resp.Body)
 	var result JobStatusResult
 	err = json.Unmarshal(body, &result)
-	log.Printf("[DEBUG] 解析后 result: jobId=%s, jobName=%s, jobStatus=%s, finishTime=%s", result.JobStatus, result.FinishTime, result.JobId, result.JobName)
+	log.Printf("[DEBUG] 解析后 result: jobId=%s, jobName=%s, jobStatus=%s, finishTime=%s", result.JobId, result.JobName, result.JobStatus, result.FinishTime)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
@@ -163,4 +163,4 @@ func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 			}
 		}
 	}
-}
+} 

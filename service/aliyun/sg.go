@@ -205,13 +205,17 @@ func SyncAllECSSecurityGroups() error {
 	var configs []aliyunModel.AliyunSGConfig
 	dbIns := db.DB
 	dbIns.Where("status != 0").Find(&configs)
+	var failed []string
 	for _, cfg := range configs {
-		ins := dbIns.Session(&gorm.Session{})
-		ins = ins.Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
+		ins := dbIns.Session(&gorm.Session{}).Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
 		err := UpdateSecurityGroupIfIPChanged(ins)
 		if err != nil {
-			return err
+			log.Printf("[ECS SG Sync] 配置ID=%d 同步失败: %v", cfg.ID, err)
+			failed = append(failed, fmt.Sprintf("ID=%d: %v", cfg.ID, err))
 		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("部分安全组同步失败: %v", failed)
 	}
 	return nil
 }
