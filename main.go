@@ -39,6 +39,7 @@ func main() {
 	alertApi.RegisterAlertRoutes(apiGroup)
 	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	api.RegisterCustomTaskRoutes(apiGroup)
+	api.RegisterSchedulerRoutes(apiGroup)
 	alertApi.RegisterAlertGroupRoutes(apiGroup)
 	alertApi.RegisterAlertGroupMemberRoutes(apiGroup)
 	alertApi.RegisterAlertTemplateRoutes(apiGroup)

@@ -228,8 +228,18 @@ function doSubmitJob() {
   ).then(res => {
     ElMessage.success('提交作业成功')
     submitDialogVisible.value = false
-  }).catch(() => {
-    ElMessage.error('提交作业失败')
+    setTimeout(() => {
+      fetch('/api/sync-job-status', { method: 'POST' })
+        .then(() => {
+          fetchTasks()
+        })
+        .catch(() => {
+          console.warn('同步作业状态失败，但不影响提交结果')
+        })
+    }, 3000)
+  }).catch((error) => {
+    const errorMsg = error.response?.data?.error || error.message || '提交作业失败'
+    ElMessage.error(errorMsg)
   })
 }
 
@@ -250,6 +260,15 @@ function doStopJob() {
   ).then(res => {
     ElMessage.success('停止作业成功')
     stopDialogVisible.value = false
+    setTimeout(() => {
+      fetch('/api/sync-job-status', { method: 'POST' })
+        .then(() => {
+          fetchTasks()
+        })
+        .catch(() => {
+          console.warn('同步作业状态失败，但不影响停止结果')
+        })
+    }, 3000)
   }).catch(() => {
     ElMessage.error('停止作业失败')
   })
@@ -272,7 +291,7 @@ function jobStatusTagType(status) {
     case 'FINISHED': return 'info'
     case 'FAILED': return 'danger'
     case 'CANCEL': return 'warning'
-    default: return ''
+    default: return 'info'
   }
 }
 

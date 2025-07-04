@@ -21,7 +21,8 @@ import (
 
 // 获取当前公网IP
 func GetCurrentPublicIP() (string, error) {
-	resp, err := http.Get("https://www.ipplus360.com/getIP")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://www.ipplus360.com/getIP")
 	if err != nil {
 		return "", err
 	}
@@ -213,4 +214,16 @@ func SyncAllECSSecurityGroups() error {
 		}
 	}
 	return nil
+}
+
+// 封装统一同步函数
+func SyncECSSecurityGroups() string {
+	log.Printf("[Scheduler] 开始同步ECS安全组")
+	err := SyncAllECSSecurityGroups()
+	if err != nil {
+		log.Printf("[Scheduler] ECS安全组同步失败: %v", err)
+		return "ECS安全组同步失败: " + err.Error()
+	}
+	log.Printf("[Scheduler] ECS安全组同步完成")
+	return "ECS安全组同步完成"
 } 

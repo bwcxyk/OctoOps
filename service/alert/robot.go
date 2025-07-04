@@ -44,7 +44,8 @@ func SendTestRobot(alert *alertModel.Alert) error {
 			webhook = u.String()
 		}
 	}
-	resp, err := http.Post(webhook, "application/json", bytes.NewReader(data))
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(webhook, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,8 @@ func SendDingTalkAlert(taskName string, taskID uint, failTime time.Time, reason 
 				webhook = u.String()
 			}
 		}
-		resp, err := http.Post(webhook, "application/json", bytes.NewReader(data))
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Post(webhook, "application/json", bytes.NewReader(data))
 		if err != nil {
 			return err
 		}
@@ -119,7 +121,8 @@ func SendDingTalkAlertToGroups(taskName string, taskID uint, failTime time.Time,
 			}
 		}
 		fmt.Printf("[DEBUG] 钉钉告警发送: webhook=%s\n[DEBUG] 钉钉告警内容: %s\n", webhook, content)
-		resp, err := http.Post(webhook, "application/json", bytes.NewReader(data))
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Post(webhook, "application/json", bytes.NewReader(data))
 		if err != nil {
 			fmt.Printf("[ERROR] 钉钉告警发送失败: %v\n", err)
 			return err
@@ -161,7 +164,8 @@ func SendDingTalkMarkdownWithTemplate(webhook, secret, title, tplContent string,
 			webhook = u.String()
 		}
 	}
-	resp, err := http.Post(webhook, "application/json", bytes.NewReader(jsonData))
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(webhook, "application/json", bytes.NewReader(jsonData))
 	if err != nil {
 		return err
 	}

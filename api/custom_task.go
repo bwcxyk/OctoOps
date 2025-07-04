@@ -23,7 +23,7 @@ func CreateCustomTask(c *gin.Context) {
     }
     db.DB.Create(&task)
     scheduler.RegisterCustomTask(
-        fmt.Sprintf("custom_%d", task.ID),
+        task.ID,
         task.Name,
         task.CustomType,
         task.CronExpr,
@@ -46,12 +46,14 @@ func UpdateCustomTask(c *gin.Context) {
         return
     }
     db.DB.Model(&task).Updates(req)
-    scheduler.DisableCustomTask(fmt.Sprintf("custom_%s", id))
+    var uid uint
+    fmt.Sscanf(id, "%d", &uid)
+    scheduler.DisableCustomTask(uid)
     var updatedTask model.CustomTask
     db.DB.First(&updatedTask, id)
     if updatedTask.Status == 1 {
         scheduler.RegisterCustomTask(
-            fmt.Sprintf("custom_%s", id),
+            updatedTask.ID,
             updatedTask.Name,
             updatedTask.CustomType,
             updatedTask.CronExpr,
@@ -65,7 +67,9 @@ func UpdateCustomTask(c *gin.Context) {
 func DeleteCustomTask(c *gin.Context) {
     id := c.Param("id")
     db.DB.Delete(&model.CustomTask{}, id)
-    scheduler.DisableCustomTask(fmt.Sprintf("custom_%s", id))
+    var uid uint
+    fmt.Sscanf(id, "%d", &uid)
+    scheduler.DisableCustomTask(uid)
     c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 

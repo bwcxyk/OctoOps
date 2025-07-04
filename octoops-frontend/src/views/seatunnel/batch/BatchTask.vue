@@ -307,7 +307,9 @@ function handleManualExecute(task) {
       }
     })
     .catch(err => {
-      ElMessage.error('手动执行失败')
+      // 显示后端返回的具体错误信息
+      const errorMsg = err.response?.data?.error || err.message || '手动执行失败'
+      ElMessage.error(errorMsg)
       console.error(err)
     })
   })

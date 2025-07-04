@@ -1,4 +1,4 @@
-package service
+package seatunnel
 
 import (
 	"encoding/json"
@@ -13,11 +13,12 @@ import (
 	seatunnelModel "octoops/model/seatunnel"
 	alertService "octoops/service/alert"
 	"strings"
+	"time"
 )
 
 // SubmitJobInternal 内部提交作业方法
 func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
-	var task seatunnelModel.Task
+	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, taskID).Error; err != nil {
 		return nil, fmt.Errorf("任务不存在: %v", err)
 	}
@@ -43,8 +44,8 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 		url += "&isStartWithSavePoint=true"
 	}
 
-	// 发送请求
-	resp, err := http.Post(url, "text/plain; charset=utf-8", strings.NewReader(task.Config))
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "text/plain; charset=utf-8", strings.NewReader(task.Config))
 	if err != nil {
 		return nil, fmt.Errorf("提交作业失败: %v", err)
 	}
@@ -59,7 +60,7 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 }
 
 // 写入作业日志的公共方法
-func WriteTaskLog(task seatunnelModel.Task, octoopsRespBody []byte) {
+func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
 	var resultMap map[string]interface{}
 	_ = json.Unmarshal(octoopsRespBody, &resultMap)
 	jobId := ""
@@ -85,12 +86,15 @@ func WriteTaskLog(task seatunnelModel.Task, octoopsRespBody []byte) {
 type JobStatusResult struct {
 	JobStatus  string `json:"jobStatus"`
 	FinishTime string `json:"finishTime"`
+	JobId      string `json:"jobId"`
+	JobName    string `json:"jobName"`
 }
 
 // 查询 seatunnel 作业状态
 func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	url := config.SeatunnelBaseURL + "/job-info/" + jobId
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
@@ -98,7 +102,7 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	body, _ := io.ReadAll(resp.Body)
 	var result JobStatusResult
 	err = json.Unmarshal(body, &result)
-	log.Printf("[DEBUG] 解析后 result: jobStatus=%s, finishTime=%s", result.JobStatus, result.FinishTime)
+	log.Printf("[DEBUG] 解析后 result: jobId=%s, jobName=%s, jobStatus=%s, finishTime=%s", result.JobStatus, result.FinishTime, result.JobId, result.JobName)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
@@ -106,7 +110,7 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 }
 
 // 发送任务告警（多渠道分发）
-func SendTaskAlert(task seatunnelModel.Task, status string) {
+func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 	if task.AlertGroup == "" {
 		return
 	}

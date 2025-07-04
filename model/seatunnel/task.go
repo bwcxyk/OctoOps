@@ -5,7 +5,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type Task struct {
+type EtlTask struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`
 	Name            string         `gorm:"size:255" json:"name"`
 	Description     string         `gorm:"size:512" json:"description"`

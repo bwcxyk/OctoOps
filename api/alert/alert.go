@@ -239,3 +239,4 @@ func RegisterAlertTemplateRoutes(r *gin.RouterGroup) {
 	r.PUT("/alert-templates/:id", UpdateAlertTemplate)
 	r.DELETE("/alert-templates/:id", DeleteAlertTemplate)
 } 
+ 

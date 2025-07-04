@@ -22,7 +22,7 @@ func Init() {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
 	DB.AutoMigrate(
-		&seatunnelModel.Task{},
+		&seatunnelModel.EtlTask{},
 		&model.TaskLog{},
 		&aliyunModel.AliyunSGConfig{},
 		&alertModel.Alert{},
