@@ -156,6 +156,15 @@ function openDialog(row = null) {
 function handleSave() {
   formRef.value.validate(valid => {
     if (!valid) return
+    // 构造 payload，只包含需要的字段
+    const payload = {
+      name: editConfig.value.name,
+      access_key: editConfig.value.access_key,
+      access_secret: editConfig.value.access_secret,
+      region_id: editConfig.value.region_id,
+      security_group_id: editConfig.value.security_group_id,
+      port_list: editConfig.value.port_list
+    }
     if (editConfig.value.id) {
       updateAliyunSGConfig(editConfig.value.id, payload).then(() => {
         ElMessage.success('更新成功')
