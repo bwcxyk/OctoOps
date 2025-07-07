@@ -51,7 +51,10 @@ func Initialization(cfg *aliyunModel.AliyunSGConfig) (*ecs.Client, error) {
 	ak := cfg.AccessKey
 	sk, err := util.DecryptAES(cfg.AccessSecret)
 	if err != nil {
-		return nil, err
+		if strings.Contains(err.Error(), "invalid padding") {
+			return nil, fmt.Errorf("ECS客户端初始化失败: 请检查AES密钥与加密时使用是否一致")
+		}
+		return nil, fmt.Errorf("ECS客户端初始化失败: %v", err)
 	}
 	config := new(credential.Config).
 		SetType("access_key").
