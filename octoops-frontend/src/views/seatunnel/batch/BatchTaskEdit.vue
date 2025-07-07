@@ -88,13 +88,25 @@ onMounted(() => {
 function handleSave() {
   formRef.value.validate(valid => {
     if (!valid) return
+    // 只取业务字段
+    const payload = {
+      id: form.value.id,
+      name: form.value.name,
+      description: form.value.description,
+      cron_expr: form.value.cron_expr,
+      config: form.value.config,
+      config_format: form.value.config_format,
+      status: form.value.status,
+      task_type: form.value.task_type
+      // 其他需要的字段
+    }
     if (isEdit.value) {
-      updateTask(form.value.id, form.value).then(() => {
+      updateTask(form.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         goBack()
       })
     } else {
-      createTask(form.value).then(() => {
+      createTask(payload).then(() => {
         ElMessage.success('创建成功')
         goBack()
       })

@@ -29,7 +29,7 @@
       <el-card class="table-card" shadow="never">
         <el-table :data="tasks" style="width: 100%" @row-click="null" v-loading="loading" empty-text="暂无数据">
           <el-table-column type="index" label="序号" width="60"/>
-          <el-table-column prop="name" label="作业名称" width="200" >
+          <el-table-column prop="name" label="作业名称" width="230" >
             <template #default="scope">
               <span
                 @click.stop="showDetail(scope.row)"
@@ -51,7 +51,7 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="cron_expr" label="Cron表达式" width="180 />
+          <el-table-column prop="cron_expr" label="Cron表达式" width="180" />
           <el-table-column label="下次执行时间" width="180">
             <template #default="scope">
               {{ scope.row.next_run_time ? formatDateTime(scope.row.next_run_time) : '未设置' }}
@@ -224,17 +224,28 @@ function openDialog(task = null) {
 }
 
 function handleSave() {
-  // 不做任何补0或格式化处理，直接用用户输入
   formRef.value.validate(valid => {
     if (!valid) return
+    // 只取业务字段
+    const payload = {
+      id: editTask.value.id,
+      name: editTask.value.name,
+      description: editTask.value.description,
+      cron_expr: editTask.value.cron_expr,
+      config: editTask.value.config,
+      config_format: editTask.value.config_format,
+      task_type: editTask.value.task_type,
+      status: editTask.value.status
+      // 其他需要的字段
+    }
     if (editTask.value.id) {
-      updateTask(editTask.value.id, editTask.value).then(() => {
+      updateTask(editTask.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
         fetchTasks()
       })
     } else {
-      createTask(editTask.value).then(() => {
+      createTask(payload).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
         fetchTasks()
