@@ -27,7 +27,7 @@ func CreateCustomTask(c *gin.Context) {
         task.Name,
         task.CustomType,
         task.CronExpr,
-        task.Status == 1,
+        task.Status,
         scheduler.GetJobFuncByType(task.CustomType),
     )
     c.JSON(http.StatusOK, task)
@@ -57,7 +57,7 @@ func UpdateCustomTask(c *gin.Context) {
             updatedTask.Name,
             updatedTask.CustomType,
             updatedTask.CronExpr,
-            true,
+            updatedTask.Status,
             scheduler.GetJobFuncByType(updatedTask.CustomType),
         )
     }

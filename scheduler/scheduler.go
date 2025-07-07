@@ -26,7 +26,7 @@ type CustomTask struct {
 	Name       string        `json:"name"`
 	Type       string        `json:"type"`
 	Spec       string        `json:"spec"`
-	Enabled    bool          `json:"enabled"`
+	Status     int           `json:"status"`
 	LastRun    time.Time     `json:"last_run"`
 	NextRun    time.Time     `json:"next_run"`
 	LastResult string        `json:"last_result"`
@@ -81,6 +81,7 @@ func AddTask(task seatunnelModel.EtlTask) error {
 	// 添加定时任务
 	entryID, err := cronScheduler.AddFunc(task.CronExpr, taskFunc)
 	if err != nil {
+		log.Printf("[Scheduler][ETL任务] 添加失败 id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.CronExpr, err)
 		return fmt.Errorf("添加ETL定时任务失败: %v", err)
 	}
 
@@ -89,8 +90,9 @@ func AddTask(task seatunnelModel.EtlTask) error {
 	// 注册到 etlTasksMap
 	t := task // 创建副本
 	etlTasksMap[task.ID] = &t
-
-	log.Printf("成功添加ETL定时任务: ID=%d, 任务名称=%s, Cron表达式=%s", entryID, task.Name, task.CronExpr)
+	// nextRun 只保留日期和时间
+	nextRun := cronScheduler.Entry(entryID).Next.Format("2006-01-02 15:04:05")
+	log.Printf("[Scheduler][ETL任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.CronExpr, nextRun)
 	return nil
 }
 
@@ -99,8 +101,12 @@ func RemoveTask(taskID uint) {
 	if entryID, exists := taskEntryMap[taskID]; exists {
 		cronScheduler.Remove(entryID)
 		delete(taskEntryMap, taskID)
+		name := ""
+		if t, ok := etlTasksMap[taskID]; ok {
+			name = t.Name
+		}
 		delete(etlTasksMap, taskID)
-		log.Printf("成功移除定时任务: 任务ID=%d, EntryID=%d", taskID, entryID)
+		log.Printf("[Scheduler][ETL任务] 移除成功 id=%d, name=%s", taskID, name)
 	}
 }
 
@@ -212,18 +218,17 @@ func GetAllTasksNextRunTime() map[uint]*time.Time {
 }
 
 // 注册自定义任务
-func RegisterCustomTask(id uint, name, typ, spec string, enabled bool, job func() string) {
+func RegisterCustomTask(id uint, name, typ, spec string, status int, job func() string) {
 	task := &CustomTask{
-		ID:      id,
-		Name:    name,
-		Type:    typ,
-		Spec:    spec,
-		Enabled: enabled,
-		Job:     job,
+		ID:     id,
+		Name:   name,
+		Type:   typ,
+		Spec:   spec,
+		Status: status,
+		Job:    job,
 	}
 	customTasks[id] = task
-	log.Printf("[Scheduler] RegisterCustomTask: id=%d, name=%s, enabled=%v, spec=%s", id, name, enabled, spec)
-	if enabled {
+	if status == 1 {
 		addCustomTaskToCron(task)
 	}
 }
@@ -254,16 +259,17 @@ func addCustomTaskToCron(task *CustomTask) {
 	if err == nil {
 		task.EntryID = entryID
 		task.NextRun = cronScheduler.Entry(entryID).Next
-		log.Printf("[Scheduler] addCustomTaskToCron: 成功添加自定义任务到调度器 id=%d, entryID=%d, nextRun=%v", task.ID, entryID, task.NextRun)
+		nextRun := task.NextRun.Format("2006-01-02 15:04:05")
+		log.Printf("[Scheduler] [自定义任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
 	} else {
-		log.Printf("[Scheduler] addCustomTaskToCron: 添加自定义任务失败 id=%d, err=%v", task.ID, err)
+		log.Printf("[Scheduler] [自定义任务] 添加失败 id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
 	}
 }
 
 func EnableCustomTask(id uint) {
 	task, ok := customTasks[id]
-	if ok && !task.Enabled {
-		task.Enabled = true
+	if ok && task.Status != 1 {
+		task.Status = 1
 		addCustomTaskToCron(task)
 		// 同步更新数据库
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 1)
@@ -272,9 +278,9 @@ func EnableCustomTask(id uint) {
 
 func DisableCustomTask(id uint) {
 	task, ok := customTasks[id]
-	if ok && task.Enabled {
+	if ok && task.Status == 1 {
 		cronScheduler.Remove(task.EntryID)
-		task.Enabled = false
+		task.Status = 0
 		// 同步更新数据库
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 0)
 	}
@@ -317,13 +323,12 @@ func loadCustomTasksFromDB() {
 	db.DB.Find(&tasks)
 	log.Printf("[Scheduler] 数据库加载自定义任务数量: %d", len(tasks))
 	for _, t := range tasks {
-		log.Printf("[Scheduler] 尝试注册自定义任务: id=%d, name=%s, status=%d, cron=%s", t.ID, t.Name, t.Status, t.CronExpr)
 		RegisterCustomTask(
 			t.ID,
 			t.Name,
 			t.CustomType,
 			t.CronExpr,
-			t.Status == 1,
+			t.Status,
 			GetJobFuncByType(t.CustomType),
 		)
 	}

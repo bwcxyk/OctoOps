@@ -259,8 +259,9 @@ func UpdateTaskWithScheduler(c *gin.Context) {
 			if oldStatus != 1 {
 				scheduler.AddTask(task)
 			} else {
-				// 如果状态已经是active，重新加载所有任务（cron表达式可能改变了）
-				scheduler.ReloadTasks()
+				// 如果状态已经是active，只重新加载当前任务
+				scheduler.RemoveTask(task.ID)
+				scheduler.AddTask(task)
 			}
 		} else {
 			// 如果状态变为inactive，从调度器中移除任务
