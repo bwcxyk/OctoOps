@@ -157,13 +157,13 @@ function handleSave() {
   formRef.value.validate(valid => {
     if (!valid) return
     if (editConfig.value.id) {
-      updateAliyunSGConfig(editConfig.value.id, editConfig.value).then(() => {
+      updateAliyunSGConfig(editConfig.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
         fetchConfigs()
       })
     } else {
-      createAliyunSGConfig(editConfig.value).then(() => {
+      createAliyunSGConfig(payload).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
         fetchConfigs()

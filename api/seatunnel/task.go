@@ -39,8 +39,8 @@ func ListTasks(c *gin.Context) {
 			query = query.Where("status = ?", 0)
 		}
 	}
-	if jobid := c.Query("jobid"); jobid != "" {
-		query = query.Where("job_id = ?", jobid)
+	if job_id := c.Query("job_id"); job_id != "" {
+		query = query.Where("job_id = ?", job_id)
 	}
 	if job_status := c.Query("job_status"); job_status != "" {
 		query = query.Where("job_status = ?", job_status)
@@ -72,7 +72,7 @@ func CreateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if task.JobID == "" {
+	if task.TaskType == "stream" && task.JobID == nil && *task.JobID == "" {
 		// 生成格式为: 20240612153001_1
 		now := time.Now().Format("200601021504") // 年月日时分
 		var count int64
@@ -80,7 +80,8 @@ func CreateTask(c *gin.Context) {
 		start := time.Now().Truncate(time.Minute)
 		end := start.Add(time.Minute)
 		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
-		task.JobID = fmt.Sprintf("%s%04d", now, count+1)
+		jobID := fmt.Sprintf("%s%04d", now, count+1)
+		task.JobID = &jobID
 	}
 	db.DB.Create(&task)
 
@@ -94,7 +95,7 @@ func CreateTask(c *gin.Context) {
 
 func UpdateTask(c *gin.Context) {
 	id := c.Param("id")
-	var req seatunnelModel.EtlTask
+	var req map[string]interface{}
 	var dbTask seatunnelModel.EtlTask
 	if err := db.DB.First(&dbTask, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
@@ -104,18 +105,17 @@ func UpdateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.JobID == "" {
-		req.JobID = dbTask.JobID
-		if req.JobID == "" {
-			now := time.Now().Format("200601021504")
-			var count int64
-			start := time.Now().Truncate(time.Minute)
-			end := start.Add(time.Minute)
-			db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
-			req.JobID = fmt.Sprintf("%s%04d", now, count+1)
-		}
+	// 保证ID和JobID不变
+	req["id"] = dbTask.ID
+	if dbTask.TaskType == "stream" && (req["job_id"] == nil || req["job_id"] == "") {
+		// 只为 stream 任务生成 job_id
+		now := time.Now().Format("200601021504")
+		var count int64
+		start := time.Now().Truncate(time.Minute)
+		end := start.Add(time.Minute)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		req["job_id"] = fmt.Sprintf("%s%04d", now, count+1)
 	}
-	req.ID = dbTask.ID // 保证ID不变
 	db.DB.Model(&dbTask).Updates(req)
 	c.JSON(http.StatusOK, req)
 }
@@ -215,7 +215,7 @@ func StopJob(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
-	if task.JobID == "" {
+	if task.JobID == nil && *task.JobID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is empty in database"})
 		return
 	}
@@ -234,44 +234,58 @@ func StopJob(c *gin.Context) {
 
 // 更新任务时同步更新调度器
 func UpdateTaskWithScheduler(c *gin.Context) {
-	var task seatunnelModel.EtlTask
 	id := c.Param("id")
-	if err := db.DB.First(&task, id).Error; err != nil {
+	var dbTask seatunnelModel.EtlTask
+	if err := db.DB.First(&dbTask, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
+	oldStatus := dbTask.Status
 
-	// 保存原始状态用于比较
-	oldStatus := task.Status
-
-	if err := c.ShouldBindJSON(&task); err != nil {
+	var req map[string]interface{}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// 保证ID和JobID不变
+	req["id"] = dbTask.ID
+	if dbTask.TaskType == "stream" && (req["job_id"] == nil || req["job_id"] == "") {
+		// 只为 stream 任务生成 job_id
+		now := time.Now().Format("200601021504")
+		var count int64
+		start := time.Now().Truncate(time.Minute)
+		end := start.Add(time.Minute)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		req["job_id"] = fmt.Sprintf("%s%04d", now, count+1)
+	}
+	db.DB.Model(&dbTask).Updates(req)
 
-	// 保存任务
-	db.DB.Save(&task)
-
-	// 如果是批处理任务且有cron表达式，更新调度器
-	if task.TaskType == "batch" && task.CronExpr != "" {
-		if task.Status == 1 {
-			// 如果状态从inactive变为active，添加任务到调度器
-			if oldStatus != 1 {
-				scheduler.AddTask(task)
-			} else {
-				// 如果状态已经是active，只重新加载当前任务
-				scheduler.RemoveTask(task.ID)
-				scheduler.AddTask(task)
+	// 刷新调度器
+	if dbTask.TaskType == "batch" && dbTask.CronExpr != "" {
+		if v, ok := req["status"]; ok {
+			statusInt := 0
+			switch vv := v.(type) {
+			case float64:
+				statusInt = int(vv)
+			case int:
+				statusInt = vv
 			}
-		} else {
-			// 如果状态变为inactive，从调度器中移除任务
-			if oldStatus == 1 {
-				scheduler.RemoveTask(task.ID)
+			if statusInt == 1 {
+				if oldStatus != 1 {
+					scheduler.AddTask(dbTask)
+				} else {
+					scheduler.RemoveTask(dbTask.ID)
+					scheduler.AddTask(dbTask)
+				}
+			} else {
+				if oldStatus == 1 {
+					scheduler.RemoveTask(dbTask.ID)
+				}
 			}
 		}
 	}
 
-	c.JSON(http.StatusOK, task)
+	c.JSON(http.StatusOK, req)
 }
 
 // 获取作业日志

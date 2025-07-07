@@ -13,7 +13,7 @@ type EtlTask struct {
 	CronExpr        string         `gorm:"size:128" json:"cron_expr"`
 	Config          string         `json:"config"`
 	ConfigFormat    string         `gorm:"size:32" json:"config_format"`
-	JobID           string         `gorm:"size:128;uniqueIndex" json:"jobid"`
+	JobID           *string         `gorm:"size:128;uniqueIndex" json:"job_id"`
 	JobStatus       string         `gorm:"size:64" json:"job_status"`
 	AlertGroup      string         `gorm:"size:255" json:"alert_group"`
 	Status          int            `json:"status"`

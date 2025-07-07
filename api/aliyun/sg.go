@@ -1,15 +1,15 @@
 package aliyun
 
 import (
+	"encoding/base64"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"octoops/db"
 	aliyunModel "octoops/model/aliyun"
 	aliyunService "octoops/service/aliyun"
 	"octoops/util"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"strings"
-	"encoding/base64"
 )
 
 // 获取所有安全组配置
@@ -63,32 +63,18 @@ func UpdateAliyunSGConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// 只更新status字段时，直接更新
-	if len(req) == 1 {
-		if status, ok := req["status"]; ok {
-			db.DB.Model(&cfg).Update("status", status)
-			c.JSON(http.StatusOK, cfg)
-			return
-		}
-	}
-	// 兼容原有逻辑
-	var reqStruct aliyunModel.AliyunSGConfig
-	if err := c.ShouldBindJSON(&reqStruct); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if reqStruct.AccessSecret != "" {
-		_, decodeErr := base64.StdEncoding.DecodeString(reqStruct.AccessSecret)
-		if decodeErr != nil || len(reqStruct.AccessSecret) < 32 {
-			sk, err := util.EncryptAES(reqStruct.AccessSecret)
+	if sk, ok := req["access_secret"].(string); ok && sk != "" {
+		_, decodeErr := base64.StdEncoding.DecodeString(sk)
+		if decodeErr != nil || len(sk) < 32 {
+			encrypted, err := util.EncryptAES(sk)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "SK加密失败: " + err.Error()})
 				return
 			}
-			reqStruct.AccessSecret = sk
+			req["access_secret"] = encrypted
 		}
 	}
-	db.DB.Model(&cfg).Updates(reqStruct)
+	db.DB.Model(&cfg).Updates(req)
 	c.JSON(http.StatusOK, cfg)
 }
 
@@ -128,4 +114,4 @@ func RegisterAliyunRoutes(r *gin.RouterGroup) {
 	r.PUT("/aliyun-sg-configs/:id", UpdateAliyunSGConfig)
 	r.DELETE("/aliyun-sg-configs/:id", DeleteAliyunSGConfig)
 	r.POST("/aliyun-sg-configs/:id/sync", SyncAliyunSGConfig)
-} 
+}

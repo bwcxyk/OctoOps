@@ -35,8 +35,8 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 	// 构建URL
 	url := config.SeatunnelBaseURL + "/submit-job?format=" + format
 	// 仅实时任务（stream）传递 jobId，离线任务（batch）不传
-	if task.TaskType == "stream" && task.JobID != "" {
-		url += "&jobId=" + task.JobID
+	if task.TaskType == "stream" && task.JobID != nil && *task.JobID != "" {
+		url += "&jobId=" + *task.JobID
 	}
 	if task.Name != "" {
 		url += "&jobName=" + task.Name
@@ -164,4 +164,4 @@ func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 			}
 		}
 	}
-} 
+}

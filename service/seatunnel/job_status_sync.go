@@ -11,9 +11,9 @@ func SyncAllJobStatus() {
 	var tasks []seatunnelModel.EtlTask
 	db.DB.Where("task_type = ?", "stream").Find(&tasks)
 	for _, task := range tasks {
-		if task.JobID != "" {
+		if task.JobID != nil && *task.JobID != "" {
 			oldStatus := task.JobStatus
-			result := QuerySeatunnelJobStatus(task.JobID)
+			result := QuerySeatunnelJobStatus(*task.JobID)
 			status := result.JobStatus
 			db.DB.Model(&task).Update("job_status", status)
 			if result.FinishTime != "" {
@@ -27,4 +27,3 @@ func SyncAllJobStatus() {
 	}
 	log.Printf("[Scheduler] 完成同步作业状态")
 }
- 
