@@ -51,7 +51,7 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="cron_expr" label="Cron表达式"/>
+          <el-table-column prop="cron_expr" label="Cron表达式" width="180 />
           <el-table-column label="下次执行时间" width="180">
             <template #default="scope">
               {{ scope.row.next_run_time ? formatDateTime(scope.row.next_run_time) : '未设置' }}
