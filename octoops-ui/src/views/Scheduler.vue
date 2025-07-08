@@ -45,7 +45,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="next_run" label="下次运行时间" width="200">
+        <el-table-column prop="next_run" label="下次执行时间" width="200">
           <template #default="scope">
             {{ formatDateTime(scope.row.next_run) }}
           </template>

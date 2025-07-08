@@ -3,11 +3,9 @@ package config
 import (
 	"fmt"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
-	"time"
 )
 
 type PostgresConfig struct {
@@ -46,8 +44,8 @@ type AliyunConfig struct {
 }
 
 type OctoopsConfig struct {
-	Mail    MailConfig    `yaml:"mail"`
-	Aliyun  AliyunConfig  `yaml:"aliyun"`
+	Mail   MailConfig   `yaml:"mail"`
+	Aliyun AliyunConfig `yaml:"aliyun"`
 	// 预留字段，后续可扩展
 }
 
@@ -58,11 +56,10 @@ type Config struct {
 }
 
 var (
-	SeatunnelBaseURL               string
-	SeatunnelJobStatusSyncInterval time.Duration
-	PostgresDSN                    string
-	mailConfig                     MailConfig
-	aliyunAesKey                   string
+	SeatunnelBaseURL string
+	PostgresDSN      string
+	mailConfig       MailConfig
+	aliyunAesKey     string
 )
 
 func overrideStringField(envVar string, field *string) {
@@ -92,10 +89,13 @@ func overrideBoolField(envVar string, field *bool) {
 func InitConfig() {
 	cfg := Config{}
 
-	if data, err := ioutil.ReadFile("config.yaml"); err == nil {
+	if data, err := os.ReadFile("config.yaml"); err == nil {
+		fmt.Println("读取 config.yaml 配置文件")
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			log.Fatalf("解析 config.yaml 失败: %v", err)
 		}
+	} else {
+		log.Fatalf("读取 config.yaml 失败: %v", err)
 	}
 
 	// Postgres

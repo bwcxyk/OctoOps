@@ -44,8 +44,8 @@ func GetCurrentPublicIP() (string, error) {
 }
 
 // 获取数据库中最新的安全组配置
-func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.AliyunSGConfig, error) {
-	var cfg aliyunModel.AliyunSGConfig
+func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.SGConfig, error) {
+	var cfg aliyunModel.SGConfig
 	err := db.Order("updated_at desc").First(&cfg).Error
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.AliyunSGConfig, error) {
 }
 
 // 初始化ECS客户端（无AK方式，推荐）
-func Initialization(cfg *aliyunModel.AliyunSGConfig) (*ecs.Client, error) {
+func Initialization(cfg *aliyunModel.SGConfig) (*ecs.Client, error) {
 	ak := cfg.AccessKey
 	sk, err := util.DecryptAES(cfg.AccessSecret)
 	if err != nil {
@@ -79,7 +79,7 @@ func Initialization(cfg *aliyunModel.AliyunSGConfig) (*ecs.Client, error) {
 }
 
 // 授权安全组（官方示例风格）
-func AuthorizeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig, port int, sourceCidrIp string) error {
+func AuthorizeSecurityGroup(client *ecs.Client, cfg *aliyunModel.SGConfig, port int, sourceCidrIp string) error {
 	log.Printf("[Authorize] IP: %s, Port: %d, SecurityGroup: %s", sourceCidrIp, port, cfg.SecurityGroupId)
 	req := &ecs.AuthorizeSecurityGroupRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
@@ -99,7 +99,7 @@ func AuthorizeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig,
 }
 
 // 撤销安全组授权，支持端口段
-func RevokeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig, portRange string, sourceCidrIp string) error {
+func RevokeSecurityGroup(client *ecs.Client, cfg *aliyunModel.SGConfig, portRange string, sourceCidrIp string) error {
 	if !strings.Contains(sourceCidrIp, "/") {
 		sourceCidrIp = sourceCidrIp + "/32"
 	}
@@ -115,7 +115,7 @@ func RevokeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig, po
 }
 
 // 查询安全组详情（官方示例风格）
-func DescribeSecurityGroupAttribute(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig) (*ecs.DescribeSecurityGroupAttributeResponse, error) {
+func DescribeSecurityGroupAttribute(client *ecs.Client, cfg *aliyunModel.SGConfig) (*ecs.DescribeSecurityGroupAttributeResponse, error) {
 	req := &ecs.DescribeSecurityGroupAttributeRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
 	req.SecurityGroupId = tea.String(cfg.SecurityGroupId)
@@ -194,8 +194,9 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	return nil
 }
 
+/**
 // 查询安全组规则详情并返回字符串（可用于日志或前端展示）
-func GetSecurityGroupDetailString(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig) (string, error) {
+func GetSecurityGroupDetailString(client *ecs.Client, cfg *aliyunModel.SGConfig) (string, error) {
 	resp, err := DescribeSecurityGroupAttribute(client, cfg)
 	if err != nil {
 		return "", err
@@ -217,15 +218,16 @@ func GetSecurityGroupDetailString(client *ecs.Client, cfg *aliyunModel.AliyunSGC
 	}
 	return sb.String(), nil
 }
+**/
 
 // 批量同步所有ECS安全组配置
 func SyncAllECSSecurityGroups() error {
-	var configs []aliyunModel.AliyunSGConfig
+	var configs []aliyunModel.SGConfig
 	dbIns := db.DB
 	dbIns.Where("status != 0").Find(&configs)
 	var failed []string
 	for _, cfg := range configs {
-		ins := dbIns.Session(&gorm.Session{}).Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
+		ins := dbIns.Session(&gorm.Session{}).Model(&aliyunModel.SGConfig{}).Where("id = ?", cfg.ID)
 		err := UpdateSecurityGroupIfIPChanged(ins)
 		if err != nil {
 			log.Printf("[ECS SG Sync] 配置ID=%d 同步失败: %v", cfg.ID, err)

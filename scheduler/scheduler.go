@@ -61,7 +61,10 @@ func loadActiveTasks() {
 	db.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks)
 
 	for _, task := range tasks {
-		AddTask(task)
+		err := AddTask(task)
+		if err != nil {
+			return
+		}
 	}
 
 	log.Printf("加载了 %d 个活跃的ETL定时任务", len(tasks))
@@ -266,6 +269,7 @@ func addCustomTaskToCron(task *CustomTask) {
 	}
 }
 
+/**
 func EnableCustomTask(id uint) {
 	task, ok := customTasks[id]
 	if ok && task.Status != 1 {
@@ -275,6 +279,7 @@ func EnableCustomTask(id uint) {
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 1)
 	}
 }
+**/
 
 func DisableCustomTask(id uint) {
 	task, ok := customTasks[id]
@@ -286,6 +291,7 @@ func DisableCustomTask(id uint) {
 	}
 }
 
+/**
 func RunCustomTaskNow(id uint) string {
 	task, ok := customTasks[id]
 	if ok {
@@ -311,12 +317,13 @@ func RunCustomTaskNow(id uint) string {
 }
 
 func ListCustomTasks() []*CustomTask {
-	tasks := []*CustomTask{}
+	var tasks []*CustomTask
 	for _, t := range customTasks {
 		tasks = append(tasks, t)
 	}
 	return tasks
 }
+**/
 
 func loadCustomTasksFromDB() {
 	var tasks []model.CustomTask

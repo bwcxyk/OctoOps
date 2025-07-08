@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"octoops/config"
 	"octoops/model"
 	alertModel "octoops/model/alert"
@@ -23,7 +24,7 @@ func Init() {
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
-	
+
 	// Set connection pool parameters
 	sqlDB, err := DB.DB()
 	if err != nil {
@@ -32,14 +33,16 @@ func Init() {
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
-	DB.AutoMigrate(
+	if err := DB.AutoMigrate(
 		&seatunnelModel.EtlTask{},
 		&model.TaskLog{},
-		&aliyunModel.AliyunSGConfig{},
+		&aliyunModel.SGConfig{},
 		&alertModel.Alert{},
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},
 		&model.CustomTask{},
-	)
+	); err != nil {
+		log.Fatalf("数据库自动迁移失败: %v", err)
+	}
 }

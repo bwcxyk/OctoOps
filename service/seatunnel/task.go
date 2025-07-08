@@ -50,7 +50,12 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("提交作业失败: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Printf("关闭响应体失败: %v\n", err)
+		}
+	}(resp.Body)
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -99,7 +104,12 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Printf("关闭响应体失败: %v\n", err)
+		}
+	}(resp.Body)
 	body, _ := io.ReadAll(resp.Body)
 	var result JobStatusResult
 	err = json.Unmarshal(body, &result)
@@ -115,7 +125,7 @@ func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 	if task.AlertGroup == "" {
 		return
 	}
-	var groupIDs []string = strings.Split(task.AlertGroup, ",")
+	var groupIDs = strings.Split(task.AlertGroup, ",")
 	for _, gid := range groupIDs {
 		var members []alertModel.AlertGroupMember
 		db.DB.Where("group_id = ?", gid).Find(&members)

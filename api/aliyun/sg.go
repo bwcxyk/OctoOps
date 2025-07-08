@@ -14,7 +14,7 @@ import (
 
 // 获取所有安全组配置
 func ListAliyunSGConfigs(c *gin.Context) {
-	var configs []aliyunModel.AliyunSGConfig
+	var configs []aliyunModel.SGConfig
 	status := c.Query("status")
 	accessKey := c.Query("access_key")
 	name := c.Query("name")
@@ -34,7 +34,7 @@ func ListAliyunSGConfigs(c *gin.Context) {
 
 // 新增安全组配置
 func CreateAliyunSGConfig(c *gin.Context) {
-	var cfg aliyunModel.AliyunSGConfig
+	var cfg aliyunModel.SGConfig
 	if err := c.ShouldBindJSON(&cfg); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -53,7 +53,7 @@ func CreateAliyunSGConfig(c *gin.Context) {
 // 更新安全组配置
 func UpdateAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg aliyunModel.AliyunSGConfig
+	var cfg aliyunModel.SGConfig
 	if err := db.DB.First(&cfg, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
@@ -81,20 +81,20 @@ func UpdateAliyunSGConfig(c *gin.Context) {
 // 删除安全组配置
 func DeleteAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	db.DB.Delete(&aliyunModel.AliyunSGConfig{}, id)
+	db.DB.Delete(&aliyunModel.SGConfig{}, id)
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // 单条同步安全组端口到阿里云
 func SyncAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg aliyunModel.AliyunSGConfig
+	var cfg aliyunModel.SGConfig
 	if err := db.DB.First(&cfg, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	dbIns := db.DB.Session(&gorm.Session{})
-	dbIns = dbIns.Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
+	dbIns = dbIns.Model(&aliyunModel.SGConfig{}).Where("id = ?", cfg.ID)
 	err := aliyunService.UpdateSecurityGroupIfIPChanged(dbIns)
 	if err != nil {
 		if strings.Contains(err.Error(), "InvalidSecurityGroupId.NotFound") {

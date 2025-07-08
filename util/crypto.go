@@ -8,7 +8,7 @@ import (
 	"octoops/config"
 )
 
-// 获取加密密钥（32字节，AES-256）
+// 获取加密密钥（32 字节，AES-256）
 func getAesKey() ([]byte, error) {
 	key := config.GetAliyunAesKey()
 	if len(key) != 32 {
@@ -68,4 +68,4 @@ func DecryptAES(cipherBase64 string) (string, error) {
 		return "", errors.New("invalid padding")
 	}
 	return string(plain[:len(plain)-pad]), nil
-} 
+}
