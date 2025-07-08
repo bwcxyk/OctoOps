@@ -1,15 +1,15 @@
-package service
+package alert
 
 import (
+	"bytes"
 	"errors"
+	"github.com/russross/blackfriday/v2"
 	"gopkg.in/gomail.v2"
 	"log"
 	"octoops/config"
-	"octoops/model"
+	alertModel "octoops/model/alert"
 	"strconv"
-	"bytes"
 	"text/template"
-	"github.com/russross/blackfriday/v2"
 )
 
 var (
@@ -33,7 +33,7 @@ func InitEmailConfigFromStruct(cfg config.MailConfig) {
 }
 
 // 邮件测试发送
-func SendTestEmail(alert *model.Alert) error {
+func SendTestEmail(alert *alertModel.Alert) error {
 	if !enableMail {
 		return errors.New("未开启邮件通知")
 	}
@@ -62,7 +62,7 @@ func SendTestEmail(alert *model.Alert) error {
 }
 
 // 邮件模板发送
-func SendEmailWithTemplate(alert *model.Alert, tplContent string, data map[string]interface{}) error {
+func SendEmailWithTemplate(alert *alertModel.Alert, tplContent string, data map[string]interface{}) error {
 	if !enableMail {
 		return errors.New("未开启邮件通知")
 	}

@@ -1,4 +1,4 @@
-package service
+package seatunnel
 
 import (
 	"encoding/json"
@@ -9,12 +9,16 @@ import (
 	"octoops/config"
 	"octoops/db"
 	"octoops/model"
+	alertModel "octoops/model/alert"
+	seatunnelModel "octoops/model/seatunnel"
+	alertService "octoops/service/alert"
 	"strings"
+	"time"
 )
 
 // SubmitJobInternal 内部提交作业方法
 func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
-	var task model.Task
+	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, taskID).Error; err != nil {
 		return nil, fmt.Errorf("任务不存在: %v", err)
 	}
@@ -30,8 +34,9 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 
 	// 构建URL
 	url := config.SeatunnelBaseURL + "/submit-job?format=" + format
-	if task.JobID != "" {
-		url += "&jobId=" + task.JobID
+	// 仅实时任务（stream）传递 jobId，离线任务（batch）不传
+	if task.TaskType == "stream" && task.JobID != nil && *task.JobID != "" {
+		url += "&jobId=" + *task.JobID
 	}
 	if task.Name != "" {
 		url += "&jobName=" + task.Name
@@ -40,8 +45,8 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 		url += "&isStartWithSavePoint=true"
 	}
 
-	// 发送请求
-	resp, err := http.Post(url, "text/plain; charset=utf-8", strings.NewReader(task.Config))
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "text/plain; charset=utf-8", strings.NewReader(task.Config))
 	if err != nil {
 		return nil, fmt.Errorf("提交作业失败: %v", err)
 	}
@@ -56,7 +61,7 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 }
 
 // 写入作业日志的公共方法
-func WriteTaskLog(task model.Task, octoopsRespBody []byte) {
+func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
 	var resultMap map[string]interface{}
 	_ = json.Unmarshal(octoopsRespBody, &resultMap)
 	jobId := ""
@@ -80,14 +85,17 @@ func WriteTaskLog(task model.Task, octoopsRespBody []byte) {
 
 // Seatunnel作业状态结构体
 type JobStatusResult struct {
-	JobStatus    string `json:"jobStatus"`
-	FinishTime   string `json:"finishTime"`
+	JobStatus  string `json:"jobStatus"`
+	FinishTime string `json:"finishTime"`
+	JobId      string `json:"jobId"`
+	JobName    string `json:"jobName"`
 }
 
 // 查询 seatunnel 作业状态
 func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	url := config.SeatunnelBaseURL + "/job-info/" + jobId
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
@@ -95,7 +103,7 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	body, _ := io.ReadAll(resp.Body)
 	var result JobStatusResult
 	err = json.Unmarshal(body, &result)
-	log.Printf("[DEBUG] 解析后 result: jobStatus=%s, finishTime=%s", result.JobStatus, result.FinishTime)
+	log.Printf("[DEBUG] 解析后 result: jobId=%s, jobName=%s, jobStatus=%s, finishTime=%s", result.JobId, result.JobName, result.JobStatus, result.FinishTime)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}
 	}
@@ -103,22 +111,22 @@ func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 }
 
 // 发送任务告警（多渠道分发）
-func SendTaskAlert(task model.Task, status string) {
+func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 	if task.AlertGroup == "" {
 		return
 	}
 	var groupIDs []string = strings.Split(task.AlertGroup, ",")
 	for _, gid := range groupIDs {
-		var members []model.AlertGroupMember
+		var members []alertModel.AlertGroupMember
 		db.DB.Where("group_id = ?", gid).Find(&members)
 		for _, m := range members {
-			var alert model.Alert
+			var alert alertModel.Alert
 			db.DB.First(&alert, m.ChannelID)
 			if alert.Status != 1 {
 				continue
 			}
 			// 查找模板内容
-			var tpl model.AlertTemplate
+			var tpl alertModel.AlertTemplate
 			if alert.TemplateID != 0 {
 				db.DB.First(&tpl, alert.TemplateID)
 			}
@@ -141,14 +149,14 @@ func SendTaskAlert(task model.Task, status string) {
 			switch alert.Type {
 			case "email":
 				if tpl.Content != "" {
-					err := SendEmailWithTemplate(&alert, tpl.Content, data)
+					err := alertService.SendEmailWithTemplate(&alert, tpl.Content, data)
 					if err != nil {
 						log.Printf("[ALERT] 邮件发送失败: %v", err)
 					}
 				}
 			case "dingtalk":
 				if tpl.Content != "" {
-					err := SendDingTalkMarkdownWithTemplate(alert.Target, alert.DingtalkSecret, "作业告警", tpl.Content, data)
+					err := alertService.SendDingTalkMarkdownWithTemplate(alert.Target, alert.DingtalkSecret, "作业告警", tpl.Content, data)
 					if err != nil {
 						log.Printf("[ALERT] 钉钉发送失败: %v", err)
 					}

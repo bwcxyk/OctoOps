@@ -10,20 +10,21 @@ import (
 	"octoops/config"
 	"octoops/db"
 	"octoops/model"
+	seatunnelModel "octoops/model/seatunnel"
 	"octoops/scheduler"
-	"octoops/service"
+	seatunnel "octoops/service/seatunnel"
 	"strings"
 	"time"
 )
 
 // 扩展的任务结构，包含下次执行时间
 type TaskWithNextRun struct {
-	model.Task
+	seatunnelModel.EtlTask
 	NextRunTime *time.Time `json:"next_run_time,omitempty"`
 }
 
 func ListTasks(c *gin.Context) {
-	var tasks []model.Task
+	var tasks []seatunnelModel.EtlTask
 	query := db.DB
 	if taskType := c.Query("task_type"); taskType != "" {
 		query = query.Where("task_type = ?", taskType)
@@ -38,8 +39,8 @@ func ListTasks(c *gin.Context) {
 			query = query.Where("status = ?", 0)
 		}
 	}
-	if jobid := c.Query("jobid"); jobid != "" {
-		query = query.Where("job_id = ?", jobid)
+	if job_id := c.Query("job_id"); job_id != "" {
+		query = query.Where("job_id = ?", job_id)
 	}
 	if job_status := c.Query("job_status"); job_status != "" {
 		query = query.Where("job_status = ?", job_status)
@@ -54,7 +55,7 @@ func ListTasks(c *gin.Context) {
 	var tasksWithNextRun []TaskWithNextRun
 	for _, task := range tasks {
 		taskWithNextRun := TaskWithNextRun{
-			Task: task,
+			EtlTask: task,
 		}
 		if nextRun, exists := nextRunTimes[task.ID]; exists {
 			taskWithNextRun.NextRunTime = nextRun
@@ -66,20 +67,21 @@ func ListTasks(c *gin.Context) {
 }
 
 func CreateTask(c *gin.Context) {
-	var task model.Task
+	var task seatunnelModel.EtlTask
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if task.JobID == "" {
+	if task.TaskType == "stream" && task.JobID == nil && *task.JobID == "" {
 		// 生成格式为: 20240612153001_1
 		now := time.Now().Format("200601021504") // 年月日时分
 		var count int64
 		// 统计本分钟内的任务数
 		start := time.Now().Truncate(time.Minute)
 		end := start.Add(time.Minute)
-		db.DB.Model(&model.Task{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
-		task.JobID = fmt.Sprintf("%s%04d", now, count+1)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		jobID := fmt.Sprintf("%s%04d", now, count+1)
+		task.JobID = &jobID
 	}
 	db.DB.Create(&task)
 
@@ -93,8 +95,8 @@ func CreateTask(c *gin.Context) {
 
 func UpdateTask(c *gin.Context) {
 	id := c.Param("id")
-	var req model.Task
-	var dbTask model.Task
+	var req map[string]interface{}
+	var dbTask seatunnelModel.EtlTask
 	if err := db.DB.First(&dbTask, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
@@ -103,18 +105,17 @@ func UpdateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.JobID == "" {
-		req.JobID = dbTask.JobID
-		if req.JobID == "" {
-			now := time.Now().Format("200601021504")
-			var count int64
-			start := time.Now().Truncate(time.Minute)
-			end := start.Add(time.Minute)
-			db.DB.Model(&model.Task{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
-			req.JobID = fmt.Sprintf("%s%04d", now, count+1)
-		}
+	// 保证ID和JobID不变
+	req["id"] = dbTask.ID
+	if dbTask.TaskType == "stream" && (req["job_id"] == nil || req["job_id"] == "") {
+		// 只为 stream 任务生成 job_id
+		now := time.Now().Format("200601021504")
+		var count int64
+		start := time.Now().Truncate(time.Minute)
+		end := start.Add(time.Minute)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		req["job_id"] = fmt.Sprintf("%s%04d", now, count+1)
 	}
-	req.ID = dbTask.ID // 保证ID不变
 	db.DB.Model(&dbTask).Updates(req)
 	c.JSON(http.StatusOK, req)
 }
@@ -123,7 +124,7 @@ func DeleteTask(c *gin.Context) {
 	id := c.Param("id")
 
 	// 先获取任务信息
-	var task model.Task
+	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
@@ -153,7 +154,29 @@ func SubmitJob(c *gin.Context) {
 	}
 	isStartWithSavePoint := c.Query("isStartWithSavePoint") == "true"
 
-	respBody, err := service.SubmitJobInternal(taskID, isStartWithSavePoint)
+	// 检查任务状态，stream 类型运行中不允许重复提交
+	var task seatunnelModel.EtlTask
+	if err := db.DB.First(&task, taskID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
+	}
+	if task.TaskType == "stream" && task.JobStatus == "RUNNING" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "实时数据集成运行中，不允许重复提交作业，请先停止当前作业"})
+		return
+	}
+
+	// 非 savepoint 启动时自动生成唯一 jobId
+	if !isStartWithSavePoint {
+		now := time.Now().Format("200601021504")
+		var count int64
+		start := time.Now().Truncate(time.Minute)
+		end := start.Add(time.Minute)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		newJobID := fmt.Sprintf("%s%04d", now, count+1)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("id = ?", taskID).Update("job_id", newJobID)
+	}
+
+	respBody, err := seatunnel.SubmitJobInternal(taskID, isStartWithSavePoint)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -172,12 +195,10 @@ func SubmitJob(c *gin.Context) {
 	if v, ok := resultMap["jobName"].(string); ok {
 		jobName = v
 	}
-	fmt.Println("写入日志：", jobId, jobName, string(respBody))
-	var task model.Task
-	db.DB.First(&task, taskID)
 	// 更新最后运行时间
 	db.DB.Model(&task).Update("last_run_time", time.Now())
-	service.WriteTaskLog(task, respBody)
+	log.Printf("[ETL] 提交作业成功: taskID=%d, jobId=%s, jobName=%s, type=%s, isStartWithSavePoint=%v", taskID, jobId, jobName, task.TaskType, isStartWithSavePoint)
+	seatunnel.WriteTaskLog(task, respBody)
 
 	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功"})
 }
@@ -189,12 +210,12 @@ func StopJob(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
 		return
 	}
-	var task model.Task
+	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
-	if task.JobID == "" {
+	if task.JobID == nil && *task.JobID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is empty in database"})
 		return
 	}
@@ -211,57 +232,60 @@ func StopJob(c *gin.Context) {
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
 }
 
-// 获取调度器状态
-func GetSchedulerStatus(c *gin.Context) {
-	status := scheduler.GetSchedulerStatus()
-	c.JSON(http.StatusOK, status)
-}
-
-// 重新加载调度器
-func ReloadScheduler(c *gin.Context) {
-	scheduler.ReloadTasks()
-	c.JSON(http.StatusOK, gin.H{"message": "调度器重新加载成功"})
-}
-
 // 更新任务时同步更新调度器
 func UpdateTaskWithScheduler(c *gin.Context) {
-	var task model.Task
 	id := c.Param("id")
-	if err := db.DB.First(&task, id).Error; err != nil {
+	var dbTask seatunnelModel.EtlTask
+	if err := db.DB.First(&dbTask, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
+	oldStatus := dbTask.Status
 
-	// 保存原始状态用于比较
-	oldStatus := task.Status
-
-	if err := c.ShouldBindJSON(&task); err != nil {
+	var req map[string]interface{}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// 保证ID和JobID不变
+	req["id"] = dbTask.ID
+	if dbTask.TaskType == "stream" && (req["job_id"] == nil || req["job_id"] == "") {
+		// 只为 stream 任务生成 job_id
+		now := time.Now().Format("200601021504")
+		var count int64
+		start := time.Now().Truncate(time.Minute)
+		end := start.Add(time.Minute)
+		db.DB.Model(&seatunnelModel.EtlTask{}).Where("created_at >= ? AND created_at < ?", start, end).Count(&count)
+		req["job_id"] = fmt.Sprintf("%s%04d", now, count+1)
+	}
+	db.DB.Model(&dbTask).Updates(req)
 
-	// 保存任务
-	db.DB.Save(&task)
-
-	// 如果是批处理任务且有cron表达式，更新调度器
-	if task.TaskType == "batch" && task.CronExpr != "" {
-		if task.Status == 1 {
-			// 如果状态从inactive变为active，添加任务到调度器
-			if oldStatus != 1 {
-				scheduler.AddTask(task)
-			} else {
-				// 如果状态已经是active，重新加载所有任务（cron表达式可能改变了）
-				scheduler.ReloadTasks()
+	// 刷新调度器
+	if dbTask.TaskType == "batch" && dbTask.CronExpr != "" {
+		if v, ok := req["status"]; ok {
+			statusInt := 0
+			switch vv := v.(type) {
+			case float64:
+				statusInt = int(vv)
+			case int:
+				statusInt = vv
 			}
-		} else {
-			// 如果状态变为inactive，从调度器中移除任务
-			if oldStatus == 1 {
-				scheduler.RemoveTask(task.ID)
+			if statusInt == 1 {
+				if oldStatus != 1 {
+					scheduler.AddTask(dbTask)
+				} else {
+					scheduler.RemoveTask(dbTask.ID)
+					scheduler.AddTask(dbTask)
+				}
+			} else {
+				if oldStatus == 1 {
+					scheduler.RemoveTask(dbTask.ID)
+				}
 			}
 		}
 	}
 
-	c.JSON(http.StatusOK, task)
+	c.JSON(http.StatusOK, req)
 }
 
 // 获取作业日志
@@ -280,8 +304,8 @@ func ListTaskLogs(c *gin.Context) {
 
 // 手动触发同步所有任务 job_status
 func SyncJobStatus(c *gin.Context) {
-	log.Printf("[API] 手动触发同步作业状态 /api/sync-job-status")
-	scheduler.SyncAllJobStatus()
+	log.Printf("[ETL] 触发同步作业状态 /api/sync-job-status")
+	seatunnel.SyncAllJobStatus()
 	c.JSON(200, gin.H{"message": "同步作业状态已触发"})
 }
 
@@ -292,8 +316,6 @@ func RegisterTaskRoutes(r *gin.RouterGroup) {
 	r.DELETE("/tasks/:id", DeleteTask)
 	r.POST("/submit-job", SubmitJob)
 	r.POST("/stop-job", StopJob)
-	r.GET("/scheduler/status", GetSchedulerStatus)
-	r.POST("/scheduler/reload", ReloadScheduler)
 	r.GET("/task-logs", ListTaskLogs)
 	r.POST("/sync-job-status", SyncJobStatus)
 }

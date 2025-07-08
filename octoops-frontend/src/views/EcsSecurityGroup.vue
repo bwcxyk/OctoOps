@@ -82,8 +82,8 @@
     </el-table>
     <el-dialog v-model="dialogVisible" :title="editConfig.id ? '编辑配置' : '新增配置'" width="500px">
       <el-form :model="editConfig" label-width="120px" :rules="rules" ref="formRef">
-        <el-form-item label="账号名" prop="account_name">
-          <el-input v-model="editConfig.account_name" />
+        <el-form-item label="名称" prop="name">
+          <el-input v-model="editConfig.name" />
         </el-form-item>
         <el-form-item label="AccessKey" prop="access_key">
           <el-input v-model="editConfig.access_key" />
@@ -121,7 +121,7 @@ const dialogVisible = ref(false)
 const editConfig = ref({})
 const formRef = ref()
 const rules = {
-  account_name: [{ required: true, message: '账号名必填', trigger: 'blur' }],
+  name: [{ required: true, message: '名称必填', trigger: 'blur' }],
   access_key: [{ required: true, message: 'AccessKey必填', trigger: 'blur' }],
   access_secret: [{ required: true, message: 'AccessSecret必填', trigger: 'blur' }],
   region_id: [{ required: true, message: 'RegionId必填', trigger: 'blur' }],
@@ -146,7 +146,7 @@ function openDialog(row = null) {
     editConfig.value = { ...row }
   } else {
     editConfig.value = {
-      account_name: '', access_key: '', access_secret: '', region_id: '', security_group_id: '', port_list: ''
+      name: '', access_key: '', access_secret: '', region_id: '', security_group_id: '', port_list: ''
     }
   }
   inputKey.value = Date.now()
@@ -156,14 +156,23 @@ function openDialog(row = null) {
 function handleSave() {
   formRef.value.validate(valid => {
     if (!valid) return
+    // 构造 payload，只包含需要的字段
+    const payload = {
+      name: editConfig.value.name,
+      access_key: editConfig.value.access_key,
+      access_secret: editConfig.value.access_secret,
+      region_id: editConfig.value.region_id,
+      security_group_id: editConfig.value.security_group_id,
+      port_list: editConfig.value.port_list
+    }
     if (editConfig.value.id) {
-      updateAliyunSGConfig(editConfig.value.id, editConfig.value).then(() => {
+      updateAliyunSGConfig(editConfig.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
         fetchConfigs()
       })
     } else {
-      createAliyunSGConfig(editConfig.value).then(() => {
+      createAliyunSGConfig(payload).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
         fetchConfigs()

@@ -5,20 +5,20 @@
     </div>
     <el-table :data="pagedCustomTasks" style="width: 100%" v-loading="loadingCustom">
       <el-table-column type="index" label="序号" width="60" />
-      <el-table-column prop="name" label="任务名称" />
-      <el-table-column prop="custom_type" label="类型" />
-      <el-table-column prop="cron_expr" label="调度周期" />
-      <el-table-column prop="status" label="状态">
+      <el-table-column prop="name" label="任务名称" width="180" />
+      <el-table-column prop="custom_type" label="类型" width="180" />
+      <el-table-column prop="cron_expr" label="调度周期" width="180" />
+      <el-table-column prop="status" label="状态" width="120" >
         <template #default="scope">
           <el-switch v-model="scope.row.status" :active-value="1" :inactive-value="0" @change="toggleTask(scope.row)" />
         </template>
       </el-table-column>
-      <el-table-column prop="last_run_time" label="上次执行">
+      <el-table-column prop="last_run_time" label="上次执行" width="180" >
         <template #default="scope">
           {{ formatDateTime(scope.row.last_run_time) }}
         </template>
       </el-table-column>
-      <el-table-column prop="last_result" label="上次结果" />
+      <el-table-column prop="last_result" label="上次结果" width="250" show-overflow-tooltip />
     </el-table>
     <el-pagination
       v-model:current-page="customPage"

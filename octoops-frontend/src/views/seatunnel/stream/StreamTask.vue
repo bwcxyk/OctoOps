@@ -5,7 +5,7 @@
       <el-card class="search-card" shadow="never">
         <el-form :inline="true" class="search-form">
           <el-form-item label="作业ID">
-            <el-input v-model="searchForm.jobid" placeholder="请输入作业ID" clearable />
+            <el-input v-model="searchForm.job_id" placeholder="请输入作业ID" clearable />
           </el-form-item>
           <el-form-item label="作业名称">
             <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable />
@@ -37,7 +37,7 @@
       <el-card class="table-card" shadow="never">
         <el-table :data="tasks" style="width: 100%" @row-click="null" v-loading="loading" empty-text="暂无数据">
           <el-table-column type="index" label="序号" width="60"/>
-          <el-table-column prop="jobid" label="作业ID" width="300"/>
+          <el-table-column prop="job_id" label="作业ID" width="300"/>
           <el-table-column prop="name" label="作业名称" width="200">
             <template #default="scope">
               <span
@@ -92,7 +92,7 @@
     </el-dialog>
     <el-dialog v-model="detailDialogVisible" title="任务详情" width="600px">
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="作业ID">{{ detailTask.jobid }}</el-descriptions-item>
+        <el-descriptions-item label="作业ID">{{ detailTask.job_id }}</el-descriptions-item>
         <el-descriptions-item label="作业名称">{{ detailTask.name }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ detailTask.description || '无' }}</el-descriptions-item>
         <el-descriptions-item label="作业状态">
@@ -131,7 +131,7 @@ const loading = ref(false)
 const searchForm = ref({
   name: '',
   job_status: '',
-  jobid: ''
+  job_id: ''
 })
 const rules = {
   name: [
@@ -169,7 +169,7 @@ function handleReset() {
   searchForm.value = {
     name: '',
     job_status: '',
-    jobid: ''
+    job_id: ''
   }
 }
 
@@ -228,8 +228,18 @@ function doSubmitJob() {
   ).then(res => {
     ElMessage.success('提交作业成功')
     submitDialogVisible.value = false
-  }).catch(() => {
-    ElMessage.error('提交作业失败')
+    setTimeout(() => {
+      fetch('/api/sync-job-status', { method: 'POST' })
+        .then(() => {
+          fetchTasks()
+        })
+        .catch(() => {
+          console.warn('同步作业状态失败，但不影响提交结果')
+        })
+    }, 3000)
+  }).catch((error) => {
+    const errorMsg = error.response?.data?.error || error.message || '提交作业失败'
+    ElMessage.error(errorMsg)
   })
 }
 
@@ -250,6 +260,15 @@ function doStopJob() {
   ).then(res => {
     ElMessage.success('停止作业成功')
     stopDialogVisible.value = false
+    setTimeout(() => {
+      fetch('/api/sync-job-status', { method: 'POST' })
+        .then(() => {
+          fetchTasks()
+        })
+        .catch(() => {
+          console.warn('同步作业状态失败，但不影响停止结果')
+        })
+    }, 3000)
   }).catch(() => {
     ElMessage.error('停止作业失败')
   })
@@ -272,7 +291,7 @@ function jobStatusTagType(status) {
     case 'FINISHED': return 'info'
     case 'FAILED': return 'danger'
     case 'CANCEL': return 'warning'
-    default: return ''
+    default: return 'info'
   }
 }
 

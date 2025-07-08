@@ -4,9 +4,6 @@
       <!-- 查询条件区域 -->
       <el-card class="search-card" shadow="never">
         <el-form :inline="true" class="search-form">
-          <el-form-item label="作业ID">
-            <el-input v-model="searchForm.jobid" placeholder="请输入作业ID" clearable />
-          </el-form-item>
           <el-form-item label="作业名称">
             <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable />
           </el-form-item>
@@ -32,7 +29,7 @@
       <el-card class="table-card" shadow="never">
         <el-table :data="tasks" style="width: 100%" @row-click="null" v-loading="loading" empty-text="暂无数据">
           <el-table-column type="index" label="序号" width="60"/>
-          <el-table-column prop="name" label="作业名称">
+          <el-table-column prop="name" label="作业名称" width="230" >
             <template #default="scope">
               <span
                 @click.stop="showDetail(scope.row)"
@@ -43,7 +40,7 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="描述" show-overflow-tooltip/>
+          <el-table-column prop="description" label="描述" width="220" show-overflow-tooltip/>
           <el-table-column label="状态" width="100">
             <template #default="scope">
               <el-switch
@@ -54,7 +51,7 @@
               />
             </template>
           </el-table-column>
-          <el-table-column prop="cron_expr" label="Cron表达式"/>
+          <el-table-column prop="cron_expr" label="Cron表达式" width="180" />
           <el-table-column label="下次执行时间" width="180">
             <template #default="scope">
               {{ scope.row.next_run_time ? formatDateTime(scope.row.next_run_time) : '未设置' }}
@@ -112,7 +109,6 @@
     </el-dialog>
     <el-dialog v-model="detailDialogVisible" title="任务详情" width="600px">
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="作业ID">{{ detailTask.jobid }}</el-descriptions-item>
         <el-descriptions-item label="作业名称">{{ detailTask.name }}</el-descriptions-item>
         <el-descriptions-item label="描述">{{ detailTask.description || '无' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -157,8 +153,7 @@ const formRef = ref()
 const loading = ref(false)
 const searchForm = ref({
   name: '',
-  status: '',
-  jobid: ''
+  status: ''
 })
 const rules = {
   name: [
@@ -207,8 +202,7 @@ function handleSearch() {
 function handleReset() {
   searchForm.value = {
     name: '',
-    status: '',
-    jobid: ''
+    status: ''
   }
 }
 
@@ -222,7 +216,6 @@ function openDialog(task = null) {
       cron_expr: '',
       config: '',
       config_format: 'json',
-      jobid: '',
       task_type: 'batch',
       status: 1
     }
@@ -231,17 +224,28 @@ function openDialog(task = null) {
 }
 
 function handleSave() {
-  // 不做任何补0或格式化处理，直接用用户输入
   formRef.value.validate(valid => {
     if (!valid) return
+    // 只取业务字段
+    const payload = {
+      id: editTask.value.id,
+      name: editTask.value.name,
+      description: editTask.value.description,
+      cron_expr: editTask.value.cron_expr,
+      config: editTask.value.config,
+      config_format: editTask.value.config_format,
+      task_type: editTask.value.task_type,
+      status: editTask.value.status
+      // 其他需要的字段
+    }
     if (editTask.value.id) {
-      updateTask(editTask.value.id, editTask.value).then(() => {
+      updateTask(editTask.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
         fetchTasks()
       })
     } else {
-      createTask(editTask.value).then(() => {
+      createTask(payload).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
         fetchTasks()
@@ -280,7 +284,7 @@ function handleStatusChange(row) {
     row.status = 0
     return
   }
-  updateTask(row.id, row).then(() => {
+  updateTask(row.id, { status: row.status }).then(() => {
     ElMessage.success('状态更新成功')
     fetchTasks()
   })
@@ -307,7 +311,9 @@ function handleManualExecute(task) {
       }
     })
     .catch(err => {
-      ElMessage.error('手动执行失败')
+      // 显示后端返回的具体错误信息
+      const errorMsg = err.response?.data?.error || err.message || '手动执行失败'
+      ElMessage.error(errorMsg)
       console.error(err)
     })
   })

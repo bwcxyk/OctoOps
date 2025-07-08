@@ -1,32 +1,48 @@
 package main
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
 	"octoops/api"
+	alertApi "octoops/api/alert"
+	aliyunApi "octoops/api/aliyun"
+	seatunnelApi "octoops/api/seatunnel"
 	"octoops/config"
 	"octoops/db"
 	"octoops/scheduler"
-	"octoops/service"
+	alertService "octoops/service/alert"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
-	config.InitConfig()                                       // 初始化配置
-	db.Init()                                                 // 初始化数据库
-	scheduler.InitScheduler()                                 // 初始化定时任务
-	service.InitEmailConfigFromStruct(config.GetMailConfig()) // 初始化邮件配置
+	// 主函数入口
+	// 设置Gin框架为生产模式
+	gin.SetMode(gin.ReleaseMode)
+	// 初始化应用配置、数据库连接、定时任务和邮件服务
+	config.InitConfig()                                            // 初始化配置
+	db.Init()                                                      // 初始化数据库
+	scheduler.InitScheduler()                                      // 初始化定时任务
+	alertService.InitEmailConfigFromStruct(config.GetMailConfig()) // 初始化邮件配置
 
-	r := gin.Default()
+	// 初始化 Gin 引擎
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery())
 
 	// API路由组
 	apiGroup := r.Group("/api")
-	api.RegisterTaskRoutes(apiGroup)
-	api.RegisterAlertRoutes(apiGroup)
-	api.RegisterAliyunRoutes(apiGroup)
+	seatunnelApi.RegisterTaskRoutes(apiGroup)
+	alertApi.RegisterAlertRoutes(apiGroup)
+	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	api.RegisterCustomTaskRoutes(apiGroup)
-	api.RegisterAlertGroupRoutes(apiGroup)
-	api.RegisterAlertGroupMemberRoutes(apiGroup)
-	api.RegisterAlertTemplateRoutes(apiGroup)
+	api.RegisterSchedulerRoutes(apiGroup)
+	alertApi.RegisterAlertGroupRoutes(apiGroup)
+	alertApi.RegisterAlertGroupMemberRoutes(apiGroup)
+	alertApi.RegisterAlertTemplateRoutes(apiGroup)
 
 	// 静态资源托管
 	r.Static("/assets", "./web/public/assets")
@@ -50,5 +66,28 @@ func main() {
 		c.File("./web/public/index.html")
 	})
 
-	r.Run(":8080")
+	// 优雅启动和关闭
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+
+	go func() {
+		log.Println("服务启动于 :8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("收到关闭信号，正在优雅关闭服务...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("服务优雅关闭失败: %v", err)
+	}
+	log.Println("服务已优雅退出")
 }

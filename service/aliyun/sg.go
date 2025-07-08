@@ -1,31 +1,39 @@
-package service
+package aliyun
 
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
+	"log"
+	"octoops/db"
+	aliyunModel "octoops/model/aliyun"
+	"octoops/util"
+
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v2/client"
 	"github.com/alibabacloud-go/tea/tea"
-	"octoops/model"
-	"octoops/db"
 	credential "github.com/aliyun/credentials-go/credentials"
-	"octoops/util"
-	"log"
 )
 
 // 获取当前公网IP
 func GetCurrentPublicIP() (string, error) {
-	resp, err := http.Get("https://www.ipplus360.com/getIP")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://www.ipplus360.com/getIP")
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Close Body error: %v", err)
+		}
+	}(resp.Body)
 	var result struct {
 		Data string `json:"data"`
 	}
@@ -36,8 +44,8 @@ func GetCurrentPublicIP() (string, error) {
 }
 
 // 获取数据库中最新的安全组配置
-func GetAliyunSGConfig(db *gorm.DB) (*model.AliyunSGConfig, error) {
-	var cfg model.AliyunSGConfig
+func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.AliyunSGConfig, error) {
+	var cfg aliyunModel.AliyunSGConfig
 	err := db.Order("updated_at desc").First(&cfg).Error
 	if err != nil {
 		return nil, err
@@ -46,11 +54,14 @@ func GetAliyunSGConfig(db *gorm.DB) (*model.AliyunSGConfig, error) {
 }
 
 // 初始化ECS客户端（无AK方式，推荐）
-func Initialization(cfg *model.AliyunSGConfig) (*ecs.Client, error) {
+func Initialization(cfg *aliyunModel.AliyunSGConfig) (*ecs.Client, error) {
 	ak := cfg.AccessKey
 	sk, err := util.DecryptAES(cfg.AccessSecret)
 	if err != nil {
-		return nil, err
+		if strings.Contains(err.Error(), "invalid padding") {
+			return nil, fmt.Errorf("ECS客户端初始化失败: 请检查AES密钥与加密时使用是否一致")
+		}
+		return nil, fmt.Errorf("ECS客户端初始化失败: %v", err)
 	}
 	config := new(credential.Config).
 		SetType("access_key").
@@ -62,13 +73,13 @@ func Initialization(cfg *model.AliyunSGConfig) (*ecs.Client, error) {
 	}
 	openCfg := &openapi.Config{
 		Credential: cred,
-		RegionId: tea.String(cfg.RegionId),
+		RegionId:   tea.String(cfg.RegionId),
 	}
 	return ecs.NewClient(openCfg)
 }
 
 // 授权安全组（官方示例风格）
-func AuthorizeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, port int, sourceCidrIp string) error {
+func AuthorizeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig, port int, sourceCidrIp string) error {
 	log.Printf("[Authorize] IP: %s, Port: %d, SecurityGroup: %s", sourceCidrIp, port, cfg.SecurityGroupId)
 	req := &ecs.AuthorizeSecurityGroupRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
@@ -88,7 +99,7 @@ func AuthorizeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, port 
 }
 
 // 撤销安全组授权，支持端口段
-func RevokeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, portRange string, sourceCidrIp string) error {
+func RevokeSecurityGroup(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig, portRange string, sourceCidrIp string) error {
 	if !strings.Contains(sourceCidrIp, "/") {
 		sourceCidrIp = sourceCidrIp + "/32"
 	}
@@ -104,7 +115,7 @@ func RevokeSecurityGroup(client *ecs.Client, cfg *model.AliyunSGConfig, portRang
 }
 
 // 查询安全组详情（官方示例风格）
-func DescribeSecurityGroupAttribute(client *ecs.Client, cfg *model.AliyunSGConfig) (*ecs.DescribeSecurityGroupAttributeResponse, error) {
+func DescribeSecurityGroupAttribute(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig) (*ecs.DescribeSecurityGroupAttributeResponse, error) {
 	req := &ecs.DescribeSecurityGroupAttributeRequest{}
 	req.RegionId = tea.String(cfg.RegionId)
 	req.SecurityGroupId = tea.String(cfg.SecurityGroupId)
@@ -118,13 +129,21 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("获取安全组配置失败: %v", err)
 	}
-	portList := []int{}
+	var portList []int
 	for _, p := range strings.Split(cfg.PortList, ",") {
 		p = strings.TrimSpace(p)
-		if p == "" { continue }
+		if p == "" {
+			continue
+		}
 		var port int
-		fmt.Sscanf(p, "%d", &port)
-		if port > 0 { portList = append(portList, port) }
+		_, scanErr := fmt.Sscanf(p, "%d", &port)
+		if scanErr != nil {
+			log.Printf("解析端口失败: %s, 错误: %v", p, scanErr)
+			continue
+		}
+		if port > 0 {
+			portList = append(portList, port)
+		}
 	}
 
 	client, err := Initialization(cfg)
@@ -168,15 +187,15 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	}
 
 	// 3. 更新last_ip和last_ip_updated_at
-	db.Model(cfg).Updates(map[string]interface{}{
-		"last_ip": newIP,
+	db.Model(cfg).Select("last_ip", "last_ip_updated_at").Updates(map[string]interface{}{
+		"last_ip":            newIP,
 		"last_ip_updated_at": time.Now(),
 	})
 	return nil
 }
 
 // 查询安全组规则详情并返回字符串（可用于日志或前端展示）
-func GetSecurityGroupDetailString(client *ecs.Client, cfg *model.AliyunSGConfig) (string, error) {
+func GetSecurityGroupDetailString(client *ecs.Client, cfg *aliyunModel.AliyunSGConfig) (string, error) {
 	resp, err := DescribeSecurityGroupAttribute(client, cfg)
 	if err != nil {
 		return "", err
@@ -201,16 +220,32 @@ func GetSecurityGroupDetailString(client *ecs.Client, cfg *model.AliyunSGConfig)
 
 // 批量同步所有ECS安全组配置
 func SyncAllECSSecurityGroups() error {
-	var configs []model.AliyunSGConfig
+	var configs []aliyunModel.AliyunSGConfig
 	dbIns := db.DB
 	dbIns.Where("status != 0").Find(&configs)
+	var failed []string
 	for _, cfg := range configs {
-		ins := dbIns.Session(&gorm.Session{})
-		ins = ins.Model(&model.AliyunSGConfig{}).Where("id = ?", cfg.ID)
+		ins := dbIns.Session(&gorm.Session{}).Model(&aliyunModel.AliyunSGConfig{}).Where("id = ?", cfg.ID)
 		err := UpdateSecurityGroupIfIPChanged(ins)
 		if err != nil {
-			return err
+			log.Printf("[ECS SG Sync] 配置ID=%d 同步失败: %v", cfg.ID, err)
+			failed = append(failed, fmt.Sprintf("ID=%d: %v", cfg.ID, err))
 		}
 	}
+	if len(failed) > 0 {
+		return fmt.Errorf("部分安全组同步失败: %v", failed)
+	}
 	return nil
+}
+
+// 封装统一同步函数
+func SyncECSSecurityGroups() string {
+	log.Printf("[Scheduler] 开始同步ECS安全组")
+	err := SyncAllECSSecurityGroups()
+	if err != nil {
+		log.Printf("[Scheduler] ECS安全组同步失败: %v", err)
+		return "ECS安全组同步失败: " + err.Error()
+	}
+	log.Printf("[Scheduler] ECS安全组同步完成")
+	return "ECS安全组同步完成"
 }
