@@ -12,7 +12,7 @@ export default defineConfig({
   },
   base: '/',
   build: {
-    outDir: '../web/public',
+    outDir: '../public',
     emptyOutDir: true
   }
 }) 

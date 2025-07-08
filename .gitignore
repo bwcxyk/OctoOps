@@ -17,7 +17,7 @@ node_modules/
 
 # Vite/前端构建
 dist/
-web/public/
+/public/
 
 # 前端缓存
 .cache/
