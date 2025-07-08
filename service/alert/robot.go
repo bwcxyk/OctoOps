@@ -32,7 +32,10 @@ func SendTestRobot(alert *alertModel.Alert) error {
 		"msgtype": "text",
 		"text":    map[string]string{"content": "这是一条测试机器人通知。"},
 	}
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("JSON序列化失败: %v", err)
+	}
 	webhook := alert.Target
 	if alert.Type == "dingtalk" && alert.DingtalkSecret != "" {
 		timestamp, sign := dingtalkSign(alert.DingtalkSecret)
@@ -176,4 +179,3 @@ func SendDingTalkMarkdownWithTemplate(webhook, secret, title, tplContent string,
 	}
 	return nil
 }
- 

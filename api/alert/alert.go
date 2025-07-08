@@ -1,15 +1,14 @@
 package alert
 
 import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
 	"octoops/db"
 	alertModel "octoops/model/alert"
 	alertService "octoops/service/alert"
-	"github.com/gin-gonic/gin"
-	"fmt"
-	"log"
 )
-
 
 // 获取所有通知
 func ListAlerts(c *gin.Context) {
@@ -49,7 +48,10 @@ func UpdateAlert(c *gin.Context) {
 // 删除通知
 func DeleteAlert(c *gin.Context) {
 	id := c.Param("id")
-	db.DB.Delete(&alertModel.Alert{}, id)
+	if err := db.DB.Delete(&alertModel.Alert{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -62,15 +64,16 @@ func TestAlert(c *gin.Context) {
 		return
 	}
 	var err error
-	if alert.Type == "email" {
+	switch alert.Type {
+	case "email":
 		err = alertService.SendTestEmail(&alert)
-	} else if alert.Type == "dingtalk" {
+	case "dingtalk":
 		err = alertService.SendTestRobot(&alert)
-	} else if alert.Type == "wechat" {
+	case "wechat":
 		err = fmt.Errorf("暂未实现企业微信测试发送")
-	} else if alert.Type == "feishu" {
+	case "feishu":
 		err = fmt.Errorf("暂未实现飞书测试发送")
-	} else {
+	default:
 		err = fmt.Errorf("未知通知类型: %s", alert.Type)
 	}
 	if err != nil {
@@ -113,9 +116,9 @@ func UpdateAlertGroup(c *gin.Context) {
 		return
 	}
 	db.DB.Model(&group).Updates(map[string]interface{}{
-		"name": req.Name,
+		"name":        req.Name,
 		"description": req.Description,
-		"status": req.Status,
+		"status":      req.Status,
 	})
 	c.JSON(http.StatusOK, group)
 }
@@ -143,8 +146,16 @@ func AddAlertGroupMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	member.GroupID = parseUint(groupID)
-	db.DB.Create(&member)
+	groupIDUint, err := parseUint(groupID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的组ID: " + err.Error()})
+		return
+	}
+	member.GroupID = groupIDUint
+	if err := db.DB.Create(&member).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建成员失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, member)
 }
 
@@ -156,10 +167,13 @@ func DeleteAlertGroupMember(c *gin.Context) {
 }
 
 // 工具函数
-func parseUint(s string) uint {
+func parseUint(s string) (uint, error) {
 	var i uint
-	fmt.Sscanf(s, "%d", &i)
-	return i
+	_, err := fmt.Sscanf(s, "%d", &i)
+	if err != nil {
+		return 0, fmt.Errorf("无效的数字格式: %s", s)
+	}
+	return i, nil
 }
 
 // 路由注册函数
@@ -218,8 +232,8 @@ func UpdateAlertTemplate(c *gin.Context) {
 		return
 	}
 	db.DB.Model(&tpl).Updates(map[string]interface{}{
-		"name": req.Name,
-		"type": req.Type,
+		"name":    req.Name,
+		"type":    req.Type,
 		"content": req.Content,
 	})
 	c.JSON(http.StatusOK, tpl)
@@ -238,5 +252,4 @@ func RegisterAlertTemplateRoutes(r *gin.RouterGroup) {
 	r.POST("/alert-templates", CreateAlertTemplate)
 	r.PUT("/alert-templates/:id", UpdateAlertTemplate)
 	r.DELETE("/alert-templates/:id", DeleteAlertTemplate)
-} 
- 
+}

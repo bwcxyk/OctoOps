@@ -3,20 +3,22 @@ package aliyun
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
+	"log"
+	"octoops/db"
+	aliyunModel "octoops/model/aliyun"
+	"octoops/util"
+
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v2/client"
 	"github.com/alibabacloud-go/tea/tea"
-	aliyunModel "octoops/model/aliyun"
-	"octoops/db"
 	credential "github.com/aliyun/credentials-go/credentials"
-	"octoops/util"
-	"log"
 )
 
 // 获取当前公网IP
@@ -26,7 +28,12 @@ func GetCurrentPublicIP() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Close Body error: %v", err)
+		}
+	}(resp.Body)
 	var result struct {
 		Data string `json:"data"`
 	}
@@ -66,7 +73,7 @@ func Initialization(cfg *aliyunModel.AliyunSGConfig) (*ecs.Client, error) {
 	}
 	openCfg := &openapi.Config{
 		Credential: cred,
-		RegionId: tea.String(cfg.RegionId),
+		RegionId:   tea.String(cfg.RegionId),
 	}
 	return ecs.NewClient(openCfg)
 }
@@ -122,13 +129,21 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("获取安全组配置失败: %v", err)
 	}
-	portList := []int{}
+	var portList []int
 	for _, p := range strings.Split(cfg.PortList, ",") {
 		p = strings.TrimSpace(p)
-		if p == "" { continue }
+		if p == "" {
+			continue
+		}
 		var port int
-		fmt.Sscanf(p, "%d", &port)
-		if port > 0 { portList = append(portList, port) }
+		_, scanErr := fmt.Sscanf(p, "%d", &port)
+		if scanErr != nil {
+			log.Printf("解析端口失败: %s, 错误: %v", p, scanErr)
+			continue
+		}
+		if port > 0 {
+			portList = append(portList, port)
+		}
 	}
 
 	client, err := Initialization(cfg)
@@ -172,8 +187,8 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	}
 
 	// 3. 更新last_ip和last_ip_updated_at
-	db.Model(cfg).Updates(map[string]interface{}{
-		"last_ip": newIP,
+	db.Model(cfg).Select("last_ip", "last_ip_updated_at").Updates(map[string]interface{}{
+		"last_ip":            newIP,
 		"last_ip_updated_at": time.Now(),
 	})
 	return nil
@@ -233,4 +248,4 @@ func SyncECSSecurityGroups() string {
 	}
 	log.Printf("[Scheduler] ECS安全组同步完成")
 	return "ECS安全组同步完成"
-} 
+}

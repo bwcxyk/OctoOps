@@ -2,13 +2,15 @@ package db
 
 import (
 	"fmt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"octoops/config"
 	"octoops/model"
+	alertModel "octoops/model/alert"
 	aliyunModel "octoops/model/aliyun"
 	seatunnelModel "octoops/model/seatunnel"
-	alertModel "octoops/model/alert"
+	"time"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 var DB *gorm.DB
@@ -21,6 +23,15 @@ func Init() {
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
+	
+	// Set connection pool parameters
+	sqlDB, err := DB.DB()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get database connection: %v", err))
+	}
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 	DB.AutoMigrate(
 		&seatunnelModel.EtlTask{},
 		&model.TaskLog{},
