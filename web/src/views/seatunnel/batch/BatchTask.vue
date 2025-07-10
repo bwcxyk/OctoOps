@@ -186,8 +186,9 @@ const router = useRouter()
 function fetchTasks() {
   loading.value = true
   axios.get('/api/tasks', { params: { task_type: 'batch', page: page.value, size: pageSize.value } }).then(res => {
-    tasks.value = res.data.items || res.data
-    total.value = res.data.total || res.data.length || 0
+    // 适配后端返回 { data: [...], total: n }
+    tasks.value = Array.isArray(res.data.data) ? res.data.data : []
+    total.value = typeof res.data.total === 'number' ? res.data.total : 0
     loading.value = false
   }).catch(() => { loading.value = false })
 }
