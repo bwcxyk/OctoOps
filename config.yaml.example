@@ -5,6 +5,8 @@
 octoops:
   aliyun:
     aes_key: "12345678901234567890123456789012" # AES加密密钥，32字节（AES-256）
+  auth:
+    jwt_secret: "your-secret-key-change-in-production" # JWT签名密钥，生产环境请使用强密钥
   mail:
     enable: true  # 是否启用邮件通知
     smtp_address: smtp.example.com  # SMTP 服务器地址
