@@ -110,7 +110,7 @@ ecs:DescribeSecurityGroupAttribute
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getAliyunSGConfigs, createAliyunSGConfig, updateAliyunSGConfig, deleteAliyunSGConfig, syncAliyunSGConfigs, syncAliyunSGConfig } from '../api/aliyun'
+import { getAliyunSGConfigs, createAliyunSGConfig, updateAliyunSGConfig, deleteAliyunSGConfig, syncAliyunSGConfigs, syncAliyunSGConfig } from '../../api/aliyun'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { InfoFilled } from '@element-plus/icons-vue'
 
@@ -185,11 +185,18 @@ function handleDelete(id) {
     type: 'warning',
     confirmButtonText: '确定',
     cancelButtonText: '取消'
-  }).then(() => {
+  })
+  .then(() => {
     deleteAliyunSGConfig(id).then(() => {
       ElMessage.success('删除成功')
       fetchConfigs()
     })
+  })
+  .catch(err => {
+    // 用户取消或关闭弹窗时，不做任何处理
+    if (err === 'cancel' || err === 'close') return
+    // 其他异常才提示
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 

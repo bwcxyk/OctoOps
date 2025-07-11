@@ -267,12 +267,20 @@ function handleDelete(id) {
   ElMessageBox.confirm('确定要删除该任务吗？', '提示', {
     type: 'warning',
     confirmButtonText: '确定',
-    cancelButtonText: '取消'
-  }).then(() => {
+    cancelButtonText: '取消',
+    closeOnClickModal: false
+  })
+  .then(() => {
     deleteTask(id).then(() => {
       ElMessage.success('删除成功')
       fetchTasks()
     })
+  })
+  .catch(err => {
+    // 用户取消或关闭弹窗时，不做任何处理
+    if (err === 'cancel' || err === 'close') return
+    // 其他异常才提示
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 
@@ -303,8 +311,10 @@ function handleManualExecute(task) {
   ElMessageBox.confirm(`确定要手动执行任务"${task.name}"吗？`, '提示', {
     type: 'warning',
     confirmButtonText: '确定',
-    cancelButtonText: '取消'
-  }).then(() => {
+    cancelButtonText: '取消',
+    closeOnClickModal: false
+  })
+  .then(() => {
     // 调用提交作业API，和实时任务保持一致
     submitJob(
       '',
@@ -325,6 +335,12 @@ function handleManualExecute(task) {
       ElMessage.error(errorMsg)
       console.error(err)
     })
+  })
+  .catch(err => {
+    // 用户取消或关闭弹窗时，不做任何处理
+    if (err === 'cancel' || err === 'close') return
+    // 其他异常才提示
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 

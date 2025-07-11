@@ -77,7 +77,8 @@ onMounted(() => {
   if (isEdit.value) {
     // 获取任务详情
     getTasks('batch').then(res => {
-      const task = res.data.find(t => t.id == route.params.id)
+      const arr = Array.isArray(res.data.data) ? res.data.data : []
+      const task = arr.find(x => x.id == route.params.id) // 用 == 宽松比较
       if (task) {
         form.value = { ...task }
       }

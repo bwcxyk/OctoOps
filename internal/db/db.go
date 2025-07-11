@@ -38,7 +38,7 @@ func Init() {
 		&seatunnelModel.EtlTask{},
 		&model.TaskLog{},
 		&aliyunModel.SGConfig{},
-		&alertModel.Alert{},
+		&alertModel.Channel{},
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},

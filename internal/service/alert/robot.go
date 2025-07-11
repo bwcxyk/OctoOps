@@ -26,7 +26,7 @@ func dingtalkSign(secret string) (string, string) {
 }
 
 // 钉钉机器人测试发送
-func SendTestRobot(alert *alertModel.Alert) error {
+func SendTestRobot(alert *alertModel.Channel) error {
 	msg := map[string]interface{}{
 		"msgtype": "text",
 		"text":    map[string]string{"content": "这是一条测试机器人通知。"},

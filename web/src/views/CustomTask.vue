@@ -6,7 +6,7 @@
     <el-table :data="customTasks" style="width: 100%" v-loading="loading">
       <el-table-column type="index" label="序号" width="60" />
       <el-table-column prop="name" label="任务名称" width="180" />
-      <el-table-column prop="custom_type" label="类型" width="180" />
+      <el-table-column prop="type" label="类型" width="180" />
       <el-table-column prop="cron_expr" label="调度周期" width="180" />
       <el-table-column prop="status" label="状态" width="120" >
         <template #default="scope">
@@ -44,8 +44,9 @@ const total = ref(0)
 function fetchCustomTasks() {
   loading.value = true
   axios.get('/api/custom-tasks', { params: { page: page.value, size: pageSize.value } }).then(res => {
-    customTasks.value = res.data.items || res.data
-    total.value = res.data.total || res.data.length || 0
+    // 适配后端返回 { data: [...], total: n }
+    customTasks.value = Array.isArray(res.data.data) ? res.data.data : []
+    total.value = typeof res.data.total === 'number' ? res.data.total : 0
     loading.value = false
   }).catch(() => { loading.value = false })
 }
@@ -74,7 +75,7 @@ function formatDateTime(dateTimeStr) {
 }
 
 function handlePageChange(val) {
-  customPage.value = val
+  page.value = val
   fetchCustomTasks()
 }
 

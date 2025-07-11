@@ -9,7 +9,7 @@ import (
 )
 
 // 邮件测试发送
-func SendTestEmail(alert *alert.Alert) error {
+func SendTestEmail(alert *alert.Channel) error {
 	// 直接调用 utils.SendMail
 	return utils.SendMail(utils.MailOptions{
 		To:      alert.Target,
@@ -19,7 +19,7 @@ func SendTestEmail(alert *alert.Alert) error {
 }
 
 // 邮件模板发送
-func SendEmailWithTemplate(alert *alert.Alert, tplContent string, data map[string]interface{}) error {
+func SendEmailWithTemplate(alert *alert.Channel, tplContent string, data map[string]interface{}) error {
 	// 渲染模板
 	tpl, err := template.New("mail").Parse(tplContent)
 	if err != nil {

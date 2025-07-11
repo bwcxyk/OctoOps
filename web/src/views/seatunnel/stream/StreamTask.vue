@@ -26,6 +26,7 @@
 
     <!-- 操作按钮区域 -->
     <el-button type="primary" @click="goToNewTask">新增</el-button>
+    <el-button type="success" @click="handleSyncJobStatus" :loading="syncing">同步作业状态</el-button>
 
     <el-table :data="tasks" style="width: 100%" v-loading="loading" empty-text="暂无数据">
       <el-table-column type="index" label="序号" width="60"/>
@@ -212,11 +213,18 @@ function handleSave() {
 function handleDelete(id) {
   ElMessageBox.confirm('确定要删除该任务吗？', '提示', {
     type: 'warning'
-  }).then(() => {
+  })
+  .then(() => {
     deleteTask(id).then(() => {
       ElMessage.success('删除成功')
       fetchTasks()
     })
+  })
+  .catch(err => {
+    // 用户取消或关闭弹窗时，不做任何处理
+    if (err === 'cancel' || err === 'close') return
+    // 其他异常才提示
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 

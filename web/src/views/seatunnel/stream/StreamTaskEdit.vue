@@ -83,7 +83,8 @@ const alertGroups = ref([])
 onMounted(() => {
   if (isEdit.value) {
     getTasks('stream').then(res => {
-      const task = res.data.find(t => t.id == route.params.id)
+      const arr = Array.isArray(res.data.data) ? res.data.data : []
+      const task = arr.find(t => t.id == route.params.id)
       if (task) {
         form.value = { ...task, enable_alert: !!(task.alert_group && task.alert_group.length > 0), alert_group: task.alert_group ? task.alert_group.split(',').map(id => Number(id)) : [] }
       }

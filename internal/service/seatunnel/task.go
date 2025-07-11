@@ -130,7 +130,7 @@ func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 		var members []alertModel.AlertGroupMember
 		db.DB.Where("group_id = ?", gid).Find(&members)
 		for _, m := range members {
-			var alert alertModel.Alert
+			var alert alertModel.Channel
 			db.DB.First(&alert, m.ChannelID)
 			if alert.Status != 1 {
 				continue

@@ -69,7 +69,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const templates = ref([])
 const loading = ref(false)
@@ -83,7 +83,7 @@ const total = ref(0)
 
 const rules = {
   name: [{ required: true, message: '模板名称必填', trigger: 'blur' }],
-  type: [{ required: true, message: '模板类型必选', trigger: 'change' }],
+  type: [{ required: true, message: '模板类型必选', trigger: 'submit' }],
   content: [{ required: true, message: '内容必填', trigger: 'blur' }]
 }
 
@@ -122,9 +122,20 @@ function saveTemplate() {
 }
 
 function deleteTemplate(row) {
-  axios.delete(`/api/alert-templates/${row.id}`).then(() => {
-    ElMessage.success('删除成功')
-    fetchTemplates()
+  ElMessageBox.confirm('确定要删除该模板吗？', '提示', {
+    type: 'warning',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  })
+  .then(() => {
+    axios.delete(`/api/alert-templates/${row.id}`).then(() => {
+      ElMessage.success('删除成功')
+      fetchTemplates()
+    })
+  })
+  .catch(err => {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 

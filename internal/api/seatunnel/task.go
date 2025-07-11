@@ -90,7 +90,8 @@ func CreateTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if task.TaskType == "stream" && task.JobID == nil && *task.JobID == "" {
+	if task.TaskType == "stream" && (task.JobID == nil || *task.JobID == "") {
+		// JobID 为空或未传
 		// 生成格式为: 20240612153001_1
 		now := time.Now().Format("200601021504") // 年月日时分
 		var count int64

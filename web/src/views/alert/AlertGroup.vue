@@ -30,7 +30,7 @@
       layout="total, prev, pager, next, jumper"
       style="margin-top: 16px; text-align: right;"
     />
-    <el-dialog v-model="editDialogVisible" :title="editForm.id ? '编辑告警组' : '新增告警组'" width="500px">
+    <el-dialog v-model="editDialogVisible" :title="editForm.id ? '编辑告警组' : '新增告警组'" width="500px" :close-on-click-modal="false">
       <el-form :model="editForm" :rules="rules" ref="editFormRef" label-width="100px">
         <el-form-item label="名称" prop="name">
           <el-input v-model="editForm.name" />
@@ -47,7 +47,7 @@
         <el-button type="primary" @click="saveGroup">保存</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="memberDialogVisible" title="成员管理" width="600px">
+    <el-dialog v-model="memberDialogVisible" title="成员管理" width="600px" :close-on-click-modal="false">
       <div style="margin-bottom: 12px;">
         <el-select v-model="addMemberType" placeholder="选择类型" style="width: 120px; margin-right: 8px;">
           <el-option label="邮件" value="email" />
@@ -87,7 +87,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { getAlerts, createAlert, updateAlert, deleteAlert } from '../../api/alert'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const groups = ref([])
 const loading = ref(false)
@@ -148,9 +148,20 @@ function saveGroup() {
 }
 
 function deleteGroup(row) {
-  axios.delete(`/api/alert-groups/${row.id}`).then(() => {
-    ElMessage.success('删除成功')
-    fetchGroups()
+  ElMessageBox.confirm('确定要删除该告警组吗？', '提示', {
+    type: 'warning',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  })
+  .then(() => {
+    axios.delete(`/api/alert-groups/${row.id}`).then(() => {
+      ElMessage.success('删除成功')
+      fetchGroups()
+    })
+  })
+  .catch(err => {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 
@@ -199,9 +210,20 @@ function addMember() {
 }
 
 function deleteMember(row) {
-  axios.delete(`/api/alert-groups/${currentGroup.value.id}/members/${row.id}`).then(() => {
-    ElMessage.success('删除成功')
-    fetchMembers()
+  ElMessageBox.confirm('确定要删除该成员吗？', '提示', {
+    type: 'warning',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  })
+  .then(() => {
+    axios.delete(`/api/alert-groups/${currentGroup.value.id}/members/${row.id}`).then(() => {
+      ElMessage.success('删除成功')
+      fetchMembers()
+    })
+  })
+  .catch(err => {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '操作失败')
   })
 }
 

@@ -10,29 +10,31 @@ import (
 	alertService "octoops/internal/service/alert"
 )
 
-// ListAlerts 获取所有通知
-func ListAlerts(c *gin.Context) {
-	var alerts []alertModel.Alert
-	db.DB.Order("created_at desc").Find(&alerts)
-	c.JSON(http.StatusOK, alerts)
+// Channel相关接口
+
+// ListChannels 获取所有渠道
+func ListChannels(c *gin.Context) {
+	var channels []alertModel.Channel
+	db.DB.Order("created_at desc").Find(&channels)
+	c.JSON(http.StatusOK, channels)
 }
 
-// CreateAlert 新增通知
-func CreateAlert(c *gin.Context) {
-	var alert alertModel.Alert
-	if err := c.ShouldBindJSON(&alert); err != nil {
+// CreateChannel 新增渠道
+func CreateChannel(c *gin.Context) {
+	var channel alertModel.Channel
+	if err := c.ShouldBindJSON(&channel); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.DB.Create(&alert)
-	c.JSON(http.StatusOK, alert)
+	db.DB.Create(&channel)
+	c.JSON(http.StatusOK, channel)
 }
 
-// UpdateAlert 更新通知
-func UpdateAlert(c *gin.Context) {
+// UpdateChannel 更新渠道
+func UpdateChannel(c *gin.Context) {
 	id := c.Param("id")
-	var alert alertModel.Alert
-	if err := db.DB.First(&alert, id).Error; err != nil {
+	var channel alertModel.Channel
+	if err := db.DB.First(&channel, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -41,47 +43,56 @@ func UpdateAlert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.DB.Model(&alert).Updates(req)
-	c.JSON(http.StatusOK, alert)
+	db.DB.Model(&channel).Updates(req)
+	c.JSON(http.StatusOK, channel)
 }
 
-// DeleteAlert 删除通知
-func DeleteAlert(c *gin.Context) {
+// DeleteChannel 删除渠道
+func DeleteChannel(c *gin.Context) {
 	id := c.Param("id")
-	if err := db.DB.Delete(&alertModel.Alert{}, id).Error; err != nil {
+	if err := db.DB.Delete(&alertModel.Channel{}, id).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// TestAlert 测试通知发送
-func TestAlert(c *gin.Context) {
+// TestChannel 测试渠道发送
+func TestChannel(c *gin.Context) {
 	id := c.Param("id")
-	var alert alertModel.Alert
-	if err := db.DB.First(&alert, id).Error; err != nil {
+	var channel alertModel.Channel
+	if err := db.DB.First(&channel, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	var err error
-	switch alert.Type {
+	switch channel.Type {
 	case "email":
-		err = alertService.SendTestEmail(&alert)
+		err = alertService.SendTestEmail(&channel)
 	case "dingtalk":
-		err = alertService.SendTestRobot(&alert)
+		err = alertService.SendTestRobot(&channel)
 	case "wechat":
 		err = fmt.Errorf("暂未实现企业微信测试发送")
 	case "feishu":
 		err = fmt.Errorf("暂未实现飞书测试发送")
 	default:
-		err = fmt.Errorf("未知通知类型: %s", alert.Type)
+		err = fmt.Errorf("未知渠道类型: %s", channel.Type)
 	}
 	if err != nil {
-		log.Printf("通知测试发送失败: %v", err)
+		log.Printf("渠道测试发送失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "发送失败", "error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "测试发送成功"})
+}
+
+// RegisterChannelRoutes 路由注册函数
+func RegisterAlertChannelRoutes(r *gin.RouterGroup) {
+	r.GET("/channels", ListChannels)
+	r.POST("/channels", CreateChannel)
+	r.PUT("/channels/:id", UpdateChannel)
+	r.DELETE("/channels/:id", DeleteChannel)
+	r.POST("/channels/:id/test", TestChannel)
 }
 
 // ListAlertGroups 告警组列表
@@ -174,15 +185,6 @@ func parseUint(s string) (uint, error) {
 		return 0, fmt.Errorf("无效的数字格式: %s", s)
 	}
 	return i, nil
-}
-
-// RegisterAlertRoutes 路由注册函数
-func RegisterAlertRoutes(r *gin.RouterGroup) {
-	r.GET("/alerts", ListAlerts)
-	r.POST("/alerts", CreateAlert)
-	r.PUT("/alerts/:id", UpdateAlert)
-	r.DELETE("/alerts/:id", DeleteAlert)
-	r.POST("/alerts/:id/test", TestAlert)
 }
 
 // RegisterAlertGroupRoutes 路由注册

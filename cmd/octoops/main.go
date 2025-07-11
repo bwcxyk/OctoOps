@@ -44,11 +44,12 @@ func main() {
 	rbacApi.RegisterAuthRoutes(apiGroup)
 
 	// 需要认证的路由
-	seatunnelApi.RegisterTaskRoutes(apiGroup)
-	alertApi.RegisterAlertRoutes(apiGroup)
-	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	api.RegisterCustomTaskRoutes(apiGroup)
 	api.RegisterSchedulerRoutes(apiGroup)
+	seatunnelApi.RegisterTaskRoutes(apiGroup)
+	aliyunApi.RegisterAliyunRoutes(apiGroup)
+	// 告警相关路由
+	alertApi.RegisterAlertChannelRoutes(apiGroup)
 	alertApi.RegisterAlertGroupRoutes(apiGroup)
 	alertApi.RegisterAlertGroupMemberRoutes(apiGroup)
 	alertApi.RegisterAlertTemplateRoutes(apiGroup)
