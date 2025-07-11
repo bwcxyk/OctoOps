@@ -23,8 +23,16 @@ docker build -t octoops-allinone .
 
 ### 2. 运行容器
 
+启动容器
+
 ```bash
 docker run -d -p 8080:8080 --name octoops octoops-allinone
+```
+
+进入容器初始化RBAC数据
+
+```bash
+docker exec -it octoops /app/octoops-init
 ```
 
 - 访问 `http://<服务器IP>:8080` 即可进入 octoops 管理平台
