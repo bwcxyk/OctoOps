@@ -2,9 +2,12 @@
 
 ## 项目简介
 
-本项目为 octoops 的前后端一体化管理平台，包含：
-- **后端**：基于 Go 语言开发，提供任务调度、作业管理等 API 服务
-- **前端**：基于 Vue3 + Element Plus，提供现代化的可视化管理界面
+octoops 是一套前后端一体化的任务调度与作业管理平台，包含：
+
+- **后端**：Go 语言开发，支持任务调度、RBAC 权限、作业日志、告警等
+- **前端**：Vue3 + Element Plus，现代化管理界面
+
+---
 
 ## 快速开始
 
@@ -20,8 +23,16 @@ docker build -t octoops-allinone .
 
 ### 2. 运行容器
 
+启动容器
+
 ```bash
 docker run -d -p 8080:8080 --name octoops octoops-allinone
+```
+
+进入容器初始化RBAC数据
+
+```bash
+docker exec -it octoops /app/octoops-init
 ```
 
 - 访问 `http://<服务器IP>:8080` 即可进入 octoops 管理平台
@@ -32,33 +43,58 @@ docker run -d -p 8080:8080 --name octoops octoops-allinone
 如需本地开发前端，可单独运行：
 
 ```bash
-cd octoops-frontend
+cd web
 npm install
 npm run dev
 ```
+前端会自动代理 API 请求到本地后端（见 `web/vite.config.js` 配置）
 
-此时前端会自动代理 API 请求到本地后端（见 `vite.config.js` 配置）
+---
 
 ## 目录结构说明
 
 ```
 octoops/
-  ├── api/           # Go 后端 API 相关
-  ├── config/        # 配置文件
-  ├── db/            # 数据库相关
-  ├── main.go        # 后端入口
-  ├── web/public/    # 前端构建产物（自动生成）
-  ├── octoops-frontend/ # 前端源码
-  └── Dockerfile     # 一体化构建脚本
+├── cmd/                  # 后端启动入口（如 cmd/octoops/main.go）
+├── internal/             # 后端核心代码
+│   ├── api/              # 路由与 API 控制器（rbac, seatunnel, alert, aliyun, custom_task等）
+│   ├── config/           # 配置加载
+│   ├── db/               # 数据库初始化
+│   ├── middleware/       # Gin 中间件（如认证、RBAC）
+│   ├── model/            # 数据模型（rbac, seatunnel, alert, aliyun, custom_task等）
+│   ├── pkg/              # JWT等通用包
+│   ├── scheduler/        # 调度核心逻辑
+│   ├── service/          # 业务服务层（alert, aliyun, seatunnel等）
+│   └── utils/            # 工具函数（加密、邮件等）
+├── web/                  # 前端源码（Vue3 + Element Plus）
+│   ├── src/
+│   │   ├── api/          # 前端 API 封装
+│   │   ├── components/   # 通用组件
+│   │   ├── layouts/      # 页面布局
+│   │   ├── store/        # 状态管理
+│   │   ├── utils/        # 前端工具
+│   │   ├── views/        # 业务页面（rbac、seatunnel、alert等）
+│   │   └── main.js       # 前端入口
+│   ├── public/           # 前端静态资源
+│   ├── package.json      # 前端依赖
+│   └── vite.config.js    # 前端构建配置
+├── config.yaml           # 主配置文件
+├── config.yaml.example   # 配置模板
+├── Dockerfile            # 一体化构建脚本
+├── go.mod                # Go 依赖
+├── go.sum
+└── README.md             # 项目说明
 ```
+
+---
 
 ## 常见问题 FAQ
 
 1. **如何更新前端页面？**
-   - 修改 `octoops-frontend` 目录下代码后，重新构建镜像即可。
+   - 修改 `web` 目录下代码后，重新构建镜像即可。
 
 2. **如何自定义端口？**
-   - 修改 `main.go` 中的 `r.Run(":8080")`，或运行容器时映射其他端口。
+   - 修改 `cmd/octoops/main.go` 中的监听端口，或运行容器时映射其他端口。
 
 3. **访问页面空白或 404？**
    - 请确保前端已正确构建，且 `web/public` 目录下有内容。
@@ -66,6 +102,8 @@ octoops/
 
 4. **API 无法访问？**
    - 检查容器端口映射和防火墙设置。
+
+---
 
 ## 贡献与反馈
 
