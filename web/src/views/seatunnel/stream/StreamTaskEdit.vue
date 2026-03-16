@@ -86,7 +86,7 @@ onMounted(() => {
       const arr = Array.isArray(res.data.data) ? res.data.data : []
       const task = arr.find(t => t.id == route.params.id)
       if (task) {
-        form.value = { ...task, enable_alert: !!(task.alert_group && task.alert_group.length > 0), alert_group: task.alert_group ? task.alert_group.split(',').map(id => Number(id)) : [] }
+        form.value = { ...task, jobid: task.job_id || '', enable_alert: !!(task.alert_group && task.alert_group.length > 0), alert_group: task.alert_group ? task.alert_group.split(',').map(id => Number(id)) : [] }
       }
     })
   }
@@ -98,7 +98,15 @@ onMounted(() => {
 function handleSave() {
   formRef.value.validate(valid => {
     if (!valid) return
-    const submitForm = { ...form.value, alert_group: form.value.enable_alert ? (Array.isArray(form.value.alert_group) ? form.value.alert_group.join(',') : form.value.alert_group) : '' }
+    const submitForm = {
+      name: form.value.name,
+      description: form.value.description,
+      job_id: form.value.jobid,
+      config: form.value.config,
+      config_format: form.value.config_format,
+      task_type: form.value.task_type,
+      alert_group: form.value.enable_alert ? (Array.isArray(form.value.alert_group) ? form.value.alert_group.join(',') : form.value.alert_group) : ''
+    }
     if (isEdit.value) {
       updateTask(form.value.id, submitForm).then(() => {
         ElMessage.success('更新成功')
