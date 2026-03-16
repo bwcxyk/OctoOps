@@ -27,11 +27,9 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	// 初始化应用配置、数据库连接、定时任务和邮件服务
 	config.InitConfig()       // 初始化配置
+	jwt.SetJWTSecret(config.GetJWTSecret()) // 初始化JWT密钥
 	db.Init()                 // 初始化数据库
 	scheduler.InitScheduler() // 初始化定时任务
-
-	// 初始化JWT密钥
-	jwt.SetJWTSecret(config.GetJWTSecret())
 
 	// 初始化 Gin 引擎
 	r := gin.New()

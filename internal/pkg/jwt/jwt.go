@@ -20,10 +20,13 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-var jwtSecret = []byte("your-secret-key") // 在实际应用中应该从配置文件读取
+var jwtSecret = []byte("")
 
 // GenerateToken 生成JWT token
 func GenerateToken(uid uint, username string, roles []string) (string, error) {
+	if len(jwtSecret) == 0 {
+		return "", errors.New("JWT密钥未设置，请检查配置")
+	}
 	claims := Claims{
 		UID:      uid,
 		Username: username,
@@ -41,6 +44,9 @@ func GenerateToken(uid uint, username string, roles []string) (string, error) {
 
 // ParseToken 解析JWT token
 func ParseToken(tokenString string) (*Claims, error) {
+	if len(jwtSecret) == 0 {
+		return nil, errors.New("JWT密钥未设置，请检查配置")
+	}
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return jwtSecret, nil
 	})
