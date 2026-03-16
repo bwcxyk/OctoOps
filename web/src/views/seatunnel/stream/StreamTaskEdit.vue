@@ -101,7 +101,7 @@ function handleSave() {
     const submitForm = {
       name: form.value.name,
       description: form.value.description,
-      jobid: form.value.jobid,
+      job_id: form.value.jobid,
       config: form.value.config,
       config_format: form.value.config_format,
       task_type: form.value.task_type,
