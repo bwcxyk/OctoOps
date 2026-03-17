@@ -315,10 +315,10 @@ function handleManualExecute(task) {
     closeOnClickModal: false
   })
   .then(() => {
-    // 调用提交作业API，和实时任务保持一致
+    // 调用提交作业API
     submitJob(
       '',
-      { params: { id: task.id, isStartWithSavePoint: false } }
+      { params: { id: task.id } }
     )
     .then(res => {
       if (res.data && res.data.error) {

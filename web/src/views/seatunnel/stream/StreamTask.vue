@@ -54,8 +54,8 @@
         <template #default="scope">
           <el-button size="small" @click.stop="goToEditTask(scope.row.id)">编辑</el-button>
           <el-button size="small" type="danger" @click.stop="handleDelete(scope.row.id)">删除</el-button>
-          <el-button size="small" type="primary" @click.stop="handleSubmitJob(scope.row)">提交作业</el-button>
-          <el-button size="small" type="warning" @click.stop="handleStopJob(scope.row)">停止作业</el-button>
+          <el-button size="small" type="primary" @click.stop="handleSubmitJob(scope.row)" :disabled="!canSubmitJob(scope.row)">提交作业</el-button>
+          <el-button size="small" type="warning" @click.stop="handleStopJob(scope.row)" :disabled="!canStopJob(scope.row)">停止作业</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -321,6 +321,18 @@ function jobStatusText(status) {
     case 'UNKNOWN': return '未知'
     default: return status || '未知'
   }
+}
+
+// 判断是否可以提交作业
+function canSubmitJob(task) {
+  // 运行中的任务不能重复提交
+  return task.job_status !== 'RUNNING'
+}
+
+// 判断是否可以停止作业
+function canStopJob(task) {
+  // 只有运行中的任务可以停止
+  return task.job_status === 'RUNNING'
 }
 
 function handleSyncJobStatus() {

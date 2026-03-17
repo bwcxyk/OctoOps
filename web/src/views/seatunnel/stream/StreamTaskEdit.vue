@@ -7,9 +7,6 @@
       <el-form-item label="描述">
         <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入任务描述" />
       </el-form-item>
-      <el-form-item label="作业ID" prop="jobid">
-        <el-input v-model="form.jobid" placeholder="可选，留空则自动生成" />
-      </el-form-item>
       <el-form-item label="配置风格" prop="config_format">
         <el-select v-model="form.config_format" placeholder="请选择配置风格">
           <el-option label="JSON" value="json" />
@@ -48,7 +45,6 @@ const isEdit = ref(!!route.params.id)
 const form = ref({
   name: '',
   description: '',
-  jobid: '',
   config: '',
   config_format: 'json',
   task_type: 'stream',
@@ -86,7 +82,7 @@ onMounted(() => {
       const arr = Array.isArray(res.data.data) ? res.data.data : []
       const task = arr.find(t => t.id == route.params.id)
       if (task) {
-        form.value = { ...task, jobid: task.job_id || '', enable_alert: !!(task.alert_group && task.alert_group.length > 0), alert_group: task.alert_group ? task.alert_group.split(',').map(id => Number(id)) : [] }
+        form.value = { ...task, enable_alert: !!(task.alert_group && task.alert_group.length > 0), alert_group: task.alert_group ? task.alert_group.split(',').map(id => Number(id)) : [] }
       }
     })
   }
@@ -101,7 +97,6 @@ function handleSave() {
     const submitForm = {
       name: form.value.name,
       description: form.value.description,
-      job_id: form.value.jobid,
       config: form.value.config,
       config_format: form.value.config_format,
       task_type: form.value.task_type,
