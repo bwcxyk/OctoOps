@@ -38,9 +38,8 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{"阿里云", "aliyun", "阿里云相关", "", 2},
 		{"ETL调度", "etl", "ETL调度相关", "", 3},
 		{"任务管理", "task", "任务管理相关", "", 4},
-		{"作业日志", "tasklog", "作业日志相关", "/tasklog", 5},
-		{"消息通知", "notify", "消息通知相关", "", 6},
-		{"系统管理", "rbac", "系统管理相关", "", 7},
+		{"消息通知", "notify", "消息通知相关", "", 5},
+		{"系统管理", "rbac", "系统管理相关", "", 6},
 	}
 	menuMap := make(map[string]*model.Permission)
 	for _, m := range menuDefs {
@@ -72,6 +71,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		// 任务管理
 		{"定时任务", "task:schedule", "定时任务", "task", "/task/timer", 1},
 		{"调度器", "task:scheduler", "调度器", "task", "/scheduler", 2},
+		{"任务日志", "task:log", "任务日志", "task", "/tasklog", 3},
 		// 消息通知
 		{"告警模板", "notify:template", "告警模板", "notify", "/alert-template", 1},
 		{"告警渠道", "notify:channel", "告警渠道", "notify", "/alert-channel", 2},

@@ -65,26 +65,23 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 	return respBody, nil
 }
 
-// 写入作业日志的公共方法
+// 写入作业日志的公共方法（提交成功）
 func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
+	WriteTaskLogWithStatus(task, octoopsRespBody, "success")
+}
+
+// 写入作业日志的公共方法（指定状态）
+func WriteTaskLogWithStatus(task seatunnelModel.EtlTask, octoopsRespBody []byte, status string) {
 	var resultMap map[string]interface{}
 	_ = json.Unmarshal(octoopsRespBody, &resultMap)
-	jobId := ""
-	jobName := ""
-	if v, ok := resultMap["jobId"].(string); ok {
-		jobId = v
-	} else if v, ok := resultMap["jobId"].(float64); ok {
-		jobId = fmt.Sprintf("%.0f", v)
-	}
+	taskName := task.Name
 	if v, ok := resultMap["jobName"].(string); ok {
-		jobName = v
+		taskName = v
 	}
 	db.DB.Create(&model.TaskLog{
-		TaskID:   task.ID,
-		JobID:    jobId,
-		JobName:  jobName,
+		TaskName: taskName,
 		Result:   string(octoopsRespBody),
-		TaskType: task.TaskType,
+		Status:   status,
 	})
 }
 

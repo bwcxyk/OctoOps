@@ -148,6 +148,8 @@ func executeTask(task seatunnelModel.EtlTask) {
 	respBody, err := seatunnelService.SubmitJobInternal(task.ID, false) // 默认不使用savepoint
 	if err != nil {
 		log.Printf("执行定时任务失败: ID=%d, 名称=%s, 错误=%v", task.ID, task.Name, err)
+		// 记录失败日志
+		seatunnelService.WriteTaskLogWithStatus(task, []byte(err.Error()), "failed")
 	} else {
 		// 写入作业日志
 		seatunnelService.WriteTaskLog(task, respBody)
@@ -252,11 +254,9 @@ func addCustomTaskToCron(task *CustomTask) {
 
 		// 新增：写入日志表
 		db.DB.Create(&model.TaskLog{
-			TaskID:   task.ID,
-			JobID:    "",
-			JobName:  task.Name,
+			TaskName: task.Name,
 			Result:   result,
-			TaskType: "custom",
+			Status:   "success",
 		})
 	})
 	if err == nil {
@@ -269,18 +269,6 @@ func addCustomTaskToCron(task *CustomTask) {
 	}
 }
 
-/**
-func EnableCustomTask(id uint) {
-	task, ok := customTasks[id]
-	if ok && task.Status != 1 {
-		task.Status = 1
-		addCustomTaskToCron(task)
-		// 同步更新数据库
-		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 1)
-	}
-}
-**/
-
 func DisableCustomTask(id uint) {
 	task, ok := customTasks[id]
 	if ok && task.Status == 1 {
@@ -290,40 +278,6 @@ func DisableCustomTask(id uint) {
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 0)
 	}
 }
-
-/**
-func RunCustomTaskNow(id uint) string {
-	task, ok := customTasks[id]
-	if ok {
-		task.LastRun = time.Now()
-		result := task.Job()
-		task.LastResult = result
-		// 新增：同步写回数据库
-		db.DB.Model(&model.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
-			"last_run_time": task.LastRun,
-			"last_result":   task.LastResult,
-		})
-		// 新增：写入日志表
-		db.DB.Create(&model.TaskLog{
-			TaskID:   task.ID,
-			JobID:    "",
-			JobName:  task.Name,
-			Result:   result,
-			TaskType: "custom",
-		})
-		return result
-	}
-	return "任务不存在"
-}
-
-func ListCustomTasks() []*CustomTask {
-	var tasks []*CustomTask
-	for _, t := range customTasks {
-		tasks = append(tasks, t)
-	}
-	return tasks
-}
-**/
 
 func loadCustomTasksFromDB() {
 	var tasks []model.CustomTask

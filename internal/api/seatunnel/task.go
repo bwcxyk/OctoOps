@@ -1,9 +1,7 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net/http"
@@ -13,9 +11,11 @@ import (
 	seatunnelModel "octoops/internal/model/seatunnel"
 	"octoops/internal/scheduler"
 	seatunnel "octoops/internal/service/seatunnel"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 // 扩展的任务结构，包含下次执行时间
@@ -60,7 +60,7 @@ func ListTasks(c *gin.Context) {
 
 	var total int64
 	query.Model(&seatunnelModel.EtlTask{}).Count(&total)
-	query = query.Limit(pageSize).Offset((page-1)*pageSize)
+	query = query.Limit(pageSize).Offset((page - 1) * pageSize)
 	query.Find(&tasks)
 
 	// 获取所有任务的下次执行时间
@@ -197,27 +197,16 @@ func SubmitJob(c *gin.Context) {
 
 	respBody, err := seatunnel.SubmitJobInternal(taskID, isStartWithSavePoint)
 	if err != nil {
+		// 记录失败日志
+		seatunnel.WriteTaskLogWithStatus(task, []byte(err.Error()), "failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 解析 seatunnel 返回内容并保存日志
-	var resultMap map[string]interface{}
-	_ = json.Unmarshal(respBody, &resultMap)
-	jobId := ""
-	jobName := ""
-	if v, ok := resultMap["jobId"].(string); ok {
-		jobId = v
-	} else if v, ok := resultMap["jobId"].(float64); ok {
-		jobId = fmt.Sprintf("%.0f", v)
-	}
-	if v, ok := resultMap["jobName"].(string); ok {
-		jobName = v
-	}
 	// 更新最后运行时间
 	db.DB.Model(&task).Update("last_run_time", time.Now())
-	log.Printf("[ETL] 提交作业成功: taskID=%d, jobId=%s, jobName=%s, type=%s, isStartWithSavePoint=%v", taskID, jobId, jobName, task.TaskType, isStartWithSavePoint)
 	seatunnel.WriteTaskLog(task, respBody)
+	log.Printf("[ETL] 提交作业成功: taskID=%d, type=%s, isStartWithSavePoint=%v", taskID, task.TaskType, isStartWithSavePoint)
 
 	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功"})
 }
@@ -311,11 +300,17 @@ func UpdateTaskWithScheduler(c *gin.Context) {
 func ListTaskLogs(c *gin.Context) {
 	var logs []model.TaskLog
 	query := db.DB
-	if jobID := c.Query("job_id"); jobID != "" {
-		query = query.Where("job_id = ?", jobID)
+	if taskName := c.Query("task_name"); taskName != "" {
+		query = query.Where("task_name LIKE ?", "%"+taskName+"%")
 	}
-	if taskType := c.Query("task_type"); taskType != "" {
-		query = query.Where("task_type = ?", taskType)
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if startTime := c.Query("start_time"); startTime != "" {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime := c.Query("end_time"); endTime != "" {
+		query = query.Where("created_at <= ?", endTime)
 	}
 
 	// 分页参数
@@ -330,7 +325,7 @@ func ListTaskLogs(c *gin.Context) {
 
 	var total int64
 	query.Model(&model.TaskLog{}).Count(&total)
-	query = query.Order("created_at desc").Limit(pageSize).Offset((page-1)*pageSize)
+	query = query.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize)
 	query.Find(&logs)
 
 	c.JSON(200, gin.H{
