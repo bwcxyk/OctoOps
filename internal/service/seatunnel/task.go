@@ -34,8 +34,8 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 
 	// 构建URL
 	url := config.SeatunnelBaseURL + "/submit-job?format=" + format
-	// 仅实时任务（stream）传递 jobId，离线任务（batch）不传
-	if task.TaskType == "stream" && task.JobID != nil && *task.JobID != "" {
+	// 只有在使用 SavePoint 启动时才传递 jobId，否则不传，让 Seatunnel 生成新的 jobId
+	if isStartWithSavePoint && task.TaskType == "stream" && task.JobID != nil && *task.JobID != "" {
 		url += "&jobId=" + *task.JobID
 	}
 	if task.Name != "" {
@@ -68,6 +68,32 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 // 写入作业日志的公共方法（提交成功）
 func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
 	WriteTaskLogWithStatus(task, octoopsRespBody, "success")
+}
+
+// 从响应体中提取 jobId 并更新到数据库
+func UpdateJobIdFromResponse(taskID uint, octoopsRespBody []byte) {
+	var resultMap map[string]interface{}
+	if err := json.Unmarshal(octoopsRespBody, &resultMap); err != nil {
+		log.Printf("[DEBUG] 解析响应失败: %v", err)
+		return
+	}
+
+	// 尝试从响应中提取 jobId
+	jobID := ""
+	if v, ok := resultMap["jobId"].(string); ok && v != "" {
+		jobID = v
+	} else if v, ok := resultMap["job_id"].(string); ok && v != "" {
+		jobID = v
+	}
+
+	// 如果找到 jobId，更新到数据库
+	if jobID != "" {
+		if err := db.DB.Model(&seatunnelModel.EtlTask{}).Where("id = ?", taskID).Update("job_id", jobID).Error; err != nil {
+			log.Printf("[ERROR] 更新 jobId 失败: taskID=%d, jobId=%s, error=%v", taskID, jobID, err)
+		} else {
+			log.Printf("[INFO] jobId 更新成功: taskID=%d, jobId=%s", taskID, jobID)
+		}
+	}
 }
 
 // 写入作业日志的公共方法（指定状态）

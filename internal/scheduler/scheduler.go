@@ -151,6 +151,9 @@ func executeTask(task seatunnelModel.EtlTask) {
 		// 记录失败日志
 		seatunnelService.WriteTaskLogWithStatus(task, []byte(err.Error()), "failed")
 	} else {
+		// 从响应中提取 jobId 并更新到数据库
+		seatunnelService.UpdateJobIdFromResponse(task.ID, respBody)
+
 		// 写入作业日志
 		seatunnelService.WriteTaskLog(task, respBody)
 		log.Printf("定时任务执行成功: ID=%d, 名称=%s", task.ID, task.Name)
