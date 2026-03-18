@@ -3,10 +3,10 @@
   
     <el-form :inline="true" class="search-form">
       <el-form-item label="作业ID">
-        <el-input v-model="searchForm.job_id" placeholder="请输入作业ID" clearable />
+        <el-input v-model="searchForm.job_id" placeholder="请输入作业ID" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item label="作业名称">
-        <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable />
+        <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item label="作业状态">
         <el-select v-model="searchForm.job_status" placeholder="请选择作业状态" clearable style="width: 150px">
@@ -151,9 +151,21 @@ let currentTask = null
 const page = ref(1)
 const pageSize = ref(10)
 
-function fetchTasks() {
+function fetchTasks(searchParams = {}) {
   loading.value = true
-  axios.get('/api/tasks', { params: { task_type: 'stream', page: page.value, size: pageSize.value } }).then(res => {
+  const params = {
+    task_type: 'stream',
+    page: page.value,
+    size: pageSize.value,
+    ...searchParams
+  }
+  // 移除空值参数
+  Object.keys(params).forEach(key => {
+    if (params[key] === '' || params[key] === null || params[key] === undefined) {
+      delete params[key]
+    }
+  })
+  axios.get('/api/tasks', { params }).then(res => {
     // 适配后端返回 { data: [...], total: n }
     tasks.value = Array.isArray(res.data.data) ? res.data.data : []
     total.value = typeof res.data.total === 'number' ? res.data.total : 0
@@ -198,13 +210,13 @@ function handleSave() {
       updateTask(editTask.value.id, editTask.value).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
-        fetchTasks()
+        fetchTasks(searchForm.value)
       })
     } else {
       createTask(editTask.value).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
-        fetchTasks()
+        fetchTasks(searchForm.value)
       })
     }
   })
@@ -217,7 +229,7 @@ function handleDelete(id) {
   .then(() => {
     deleteTask(id).then(() => {
       ElMessage.success('删除成功')
-      fetchTasks()
+      fetchTasks(searchForm.value)
     })
   })
   .catch(err => {

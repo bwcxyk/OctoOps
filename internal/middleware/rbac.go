@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"octoops/internal/db"
 	"octoops/internal/model/rbac"
+
+	"github.com/gin-gonic/gin"
 )
 
 // RequirePermission 要求特定权限的中间件

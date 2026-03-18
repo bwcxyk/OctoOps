@@ -1,8 +1,9 @@
 package utils
 
 import (
-	"gopkg.in/gomail.v2"
 	"octoops/internal/config"
+
+	"gopkg.in/gomail.v2"
 )
 
 type MailOptions struct {
@@ -35,4 +36,4 @@ func SendMail(opt MailOptions) error {
 
 	d.SSL = cfg.SSL
 	return d.DialAndSend(m)
-} 
+}

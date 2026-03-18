@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"fmt"
-	"github.com/robfig/cron/v3"
 	"log"
 	"octoops/internal/db"
 	"octoops/internal/model"
@@ -10,6 +9,8 @@ import (
 	aliyunService "octoops/internal/service/aliyun"
 	seatunnelService "octoops/internal/service/seatunnel"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 var cronScheduler *cron.Cron

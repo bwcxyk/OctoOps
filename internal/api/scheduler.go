@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
+	"octoops/internal/scheduler"
 
 	"github.com/gin-gonic/gin"
-	"octoops/internal/scheduler"
 )
 
 // 启动调度器
@@ -37,4 +37,4 @@ func RegisterSchedulerRoutes(r *gin.RouterGroup) {
 	r.POST("/scheduler/stop", StopSchedulerHandler)
 	r.GET("/scheduler/status", GetSchedulerStatus)
 	r.POST("/scheduler/reload", ReloadScheduler)
-} 
+}
