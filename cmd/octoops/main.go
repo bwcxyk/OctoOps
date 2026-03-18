@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"octoops/internal/api"
@@ -19,6 +18,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -26,10 +27,10 @@ func main() {
 	// 设置Gin框架为生产模式
 	gin.SetMode(gin.ReleaseMode)
 	// 初始化应用配置、数据库连接、定时任务和邮件服务
-	config.InitConfig()       // 初始化配置
+	config.InitConfig()                     // 初始化配置
 	jwt.SetJWTSecret(config.GetJWTSecret()) // 初始化JWT密钥
-	db.Init()                 // 初始化数据库
-	scheduler.InitScheduler() // 初始化定时任务
+	db.Init()                               // 初始化数据库
+	scheduler.InitScheduler()               // 初始化定时任务
 
 	// 初始化 Gin 引擎
 	r := gin.New()

@@ -2,12 +2,13 @@ package alert
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"octoops/internal/db"
 	alertModel "octoops/internal/model/alert"
 	alertService "octoops/internal/service/alert"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Channel相关接口

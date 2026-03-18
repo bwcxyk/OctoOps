@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"octoops/internal/config"
+
 	"golang.org/x/crypto/bcrypt"
 )
 

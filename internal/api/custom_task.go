@@ -2,13 +2,14 @@ package api
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"octoops/internal/db"
 	"octoops/internal/model"
 	"octoops/internal/scheduler"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 func ListCustomTasks(c *gin.Context) {
@@ -25,7 +26,7 @@ func ListCustomTasks(c *gin.Context) {
 	}
 	var total int64
 	query.Count(&total)
-	query = query.Order("created_at desc").Limit(pageSize).Offset((page-1)*pageSize)
+	query = query.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize)
 	query.Find(&tasks)
 	c.JSON(200, gin.H{
 		"data":  tasks,

@@ -2,10 +2,11 @@ package config
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 	"strconv"
+
+	"gopkg.in/yaml.v3"
 )
 
 type PostgresConfig struct {

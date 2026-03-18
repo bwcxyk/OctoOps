@@ -2,10 +2,11 @@ package alert
 
 import (
 	"bytes"
-	"github.com/russross/blackfriday/v2"
 	"octoops/internal/model/alert"
 	"octoops/internal/utils"
 	"text/template"
+
+	"github.com/russross/blackfriday/v2"
 )
 
 // 邮件测试发送
