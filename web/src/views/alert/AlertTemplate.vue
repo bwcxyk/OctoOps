@@ -1,7 +1,31 @@
 <template>
   <el-card>
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <el-button type="primary" @click="showEditDialog()">新增</el-button>
+      <div style="display: flex; align-items: center;">
+        <el-button type="primary" @click="showEditDialog()">新增</el-button>
+        <el-tooltip placement="right" effect="light">
+          <template #content>
+            <div style="line-height: 1.8; max-width: 400px;">
+              <strong>模板格式说明（Go Template 语法）：</strong><br/>
+              <br/>
+              <strong>可用变量：</strong><br/>
+              • <code>&lbrace;&lbrace;.JobID&rbrace;&rbrace;</code> - 作业ID<br/>
+              • <code>&lbrace;&lbrace;.JobName&rbrace;&rbrace;</code> - 作业名称<br/>
+              • <code>&lbrace;&lbrace;.Status&rbrace;&rbrace;</code> - 作业状态<br/>
+              • <code>&lbrace;&lbrace;.TaskType&rbrace;&rbrace;</code> - 任务类型<br/>
+              • <code>&lbrace;&lbrace;.StartTime&rbrace;&rbrace;</code> - 开始时间<br/>
+              • <code>&lbrace;&lbrace;.EndTime&rbrace;&rbrace;</code> - 结束时间<br/>
+              • <code>&lbrace;&lbrace;.Reason&rbrace;&rbrace;</code> - 原因<br/>
+              <br/>
+              <strong>示例：</strong><br/>
+              <code>作业【&lbrace;&lbrace;.JobName&rbrace;&rbrace;】状态变更为：&lbrace;&lbrace;.Status&rbrace;&rbrace;<br/>时间：&lbrace;&lbrace;.StartTime&rbrace;&rbrace;</code>
+            </div>
+          </template>
+          <el-icon style="color: #909399; margin-left: 8px; cursor: pointer; vertical-align: middle;">
+            <InfoFilled />
+          </el-icon>
+        </el-tooltip>
+      </div>
     </div>
     <el-table :data="templates" style="width: 100%" v-loading="loading" empty-text="暂无数据">
       <el-table-column type="index" label="序号" width="60" />
@@ -70,6 +94,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 
 const templates = ref([])
 const loading = ref(false)
