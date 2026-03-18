@@ -26,10 +26,10 @@ ecs:DescribeSecurityGroupAttribute
 
       <el-form :inline="true" class="search-form">
         <el-form-item label="名称">
-          <el-input v-model="searchForm.name" placeholder="名称" clearable @keyup.enter="handleSearch" />
+          <el-input v-model="searchForm.name" placeholder="名称" clearable @keyup.enter="handleSearch" style="width: 180px" />
         </el-form-item>
         <el-form-item label="AccessKey">
-          <el-input v-model="searchForm.access_key" placeholder="AccessKey" clearable @keyup.enter="handleSearch" />
+          <el-input v-model="searchForm.access_key" placeholder="AccessKey" clearable @keyup.enter="handleSearch" style="width: 220px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 120px">

@@ -3,7 +3,7 @@
 
     <el-form :inline="true" class="search-form">
       <el-form-item label="作业名称">
-        <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable />
+        <el-input v-model="searchForm.name" placeholder="请输入作业名称" clearable style="width: 200px" />
       </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 120px">
@@ -183,9 +183,21 @@ const rules = {
 }
 const router = useRouter()
 
-function fetchTasks() {
+function fetchTasks(searchParams = {}) {
   loading.value = true
-  axios.get('/api/tasks', { params: { task_type: 'batch', page: page.value, size: pageSize.value } }).then(res => {
+  const params = {
+    task_type: 'batch',
+    page: page.value,
+    size: pageSize.value,
+    ...searchParams
+  }
+  // 移除空值参数
+  Object.keys(params).forEach(key => {
+    if (params[key] === '' || params[key] === null || params[key] === undefined) {
+      delete params[key]
+    }
+  })
+  axios.get('/api/tasks', { params }).then(res => {
     // 适配后端返回 { data: [...], total: n }
     tasks.value = Array.isArray(res.data.data) ? res.data.data : []
     total.value = typeof res.data.total === 'number' ? res.data.total : 0
@@ -251,13 +263,13 @@ function handleSave() {
       updateTask(editTask.value.id, payload).then(() => {
         ElMessage.success('更新成功')
         dialogVisible.value = false
-        fetchTasks()
+        fetchTasks(searchForm.value)
       })
     } else {
       createTask(payload).then(() => {
         ElMessage.success('创建成功')
         dialogVisible.value = false
-        fetchTasks()
+        fetchTasks(searchForm.value)
       })
     }
   })
@@ -273,7 +285,7 @@ function handleDelete(id) {
   .then(() => {
     deleteTask(id).then(() => {
       ElMessage.success('删除成功')
-      fetchTasks()
+      fetchTasks(searchForm.value)
     })
   })
   .catch(err => {
@@ -303,7 +315,7 @@ function handleStatusChange(row) {
   }
   updateTask(row.id, { status: row.status }).then(() => {
     ElMessage.success('状态更新成功')
-    fetchTasks()
+    fetchTasks(searchForm.value)
   })
 }
 
@@ -326,7 +338,7 @@ function handleManualExecute(task) {
       } else {
         ElMessage.success('手动执行成功')
         // 刷新任务列表以更新最后运行时间
-        fetchTasks()
+        fetchTasks(searchForm.value)
       }
     })
     .catch(err => {
