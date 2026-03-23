@@ -147,8 +147,9 @@ func InitConfig() {
 	jwtSecret = cfg.Octoops.Auth.JWTSecret
 
 	// 设置JWT密钥
+	// Enforce a non-empty JWT secret.
 	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production"
+		log.Fatal("octoops.auth.jwt_secret is required")
 	}
 }
 
