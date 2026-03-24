@@ -28,30 +28,23 @@ export default defineConfig({
   build: {
     outDir: '../public',
     emptyOutDir: true,
+    sourcemap: false,
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+
         manualChunks(id) {
-          if (!id.includes('node_modules')) {
-            return
+          if (id.includes('node_modules')) {
+            if (id.includes('element-plus')) return 'element-plus'
+            if (id.includes('axios')) return 'http-vendor'
+            if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) {
+              return 'vue-vendor'
+            }
+            return 'vendor'
           }
-
-          if (id.includes('element-plus')) {
-            return 'element-plus'
-          }
-
-          if (id.includes('axios')) {
-            return 'http-vendor'
-          }
-
-          if (
-            id.includes('vue') ||
-            id.includes('pinia') ||
-            id.includes('vue-router')
-          ) {
-            return 'vue-vendor'
-          }
-
-          return 'vendor'
         }
       }
     }
