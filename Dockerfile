@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # --------- 后端构建阶段 ---------
-FROM golang:1.23 AS backend-build
+FROM golang:1.24 AS backend-build
 
 WORKDIR /app
 
