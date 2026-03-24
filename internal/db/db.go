@@ -34,15 +34,16 @@ func Init() {
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	// Auto migrate models
 	if err := DB.AutoMigrate(
 		&seatunnelModel.EtlTask{},
-		&model.TaskLog{},
 		&aliyunModel.SGConfig{},
 		&alertModel.Channel{},
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},
 		&model.CustomTask{},
+		&model.TaskLog{},
 		// RBAC相关模型
 		&rbacModel.User{},
 		&rbacModel.Role{},

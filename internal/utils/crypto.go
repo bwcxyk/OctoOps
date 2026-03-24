@@ -3,14 +3,16 @@ package utils
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"io"
 	"octoops/internal/config"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-// 获取加密密钥（32 字节，AES-256）
 func getAesKey() ([]byte, error) {
 	key := config.GetAliyunAesKey()
 	if len(key) != 32 {
@@ -19,7 +21,7 @@ func getAesKey() ([]byte, error) {
 	return []byte(key), nil
 }
 
-// AES加密，返回base64字符串
+// EncryptAES encrypts with AES-GCM and returns a versioned base64 string.
 func EncryptAES(plainText string) (string, error) {
 	key, err := getAesKey()
 	if err != nil {
@@ -29,21 +31,20 @@ func EncryptAES(plainText string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	plain := []byte(plainText)
-	if len(plain)%aes.BlockSize != 0 {
-		pad := aes.BlockSize - len(plain)%aes.BlockSize
-		for i := 0; i < pad; i++ {
-			plain = append(plain, byte(pad))
-		}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
 	}
-	cipherText := make([]byte, len(plain))
-	iv := key[:aes.BlockSize]
-	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(cipherText, plain)
-	return base64.StdEncoding.EncodeToString(cipherText), nil
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+	cipherText := gcm.Seal(nil, nonce, []byte(plainText), nil)
+	encoded := base64.StdEncoding.EncodeToString(append(nonce, cipherText...))
+	return "gcm:" + encoded, nil
 }
 
-// AES解密，输入base64字符串
+// DecryptAES decrypts AES-GCM values and falls back to legacy AES-CBC.
 func DecryptAES(cipherBase64 string) (string, error) {
 	key, err := getAesKey()
 	if err != nil {
@@ -53,6 +54,29 @@ func DecryptAES(cipherBase64 string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if strings.HasPrefix(cipherBase64, "gcm:") {
+		raw := strings.TrimPrefix(cipherBase64, "gcm:")
+		cipherText, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			return "", err
+		}
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return "", err
+		}
+		if len(cipherText) < gcm.NonceSize() {
+			return "", errors.New("cipherText is too short")
+		}
+		nonce := cipherText[:gcm.NonceSize()]
+		enc := cipherText[gcm.NonceSize():]
+		plain, err := gcm.Open(nil, nonce, enc, nil)
+		if err != nil {
+			return "", err
+		}
+		return string(plain), nil
+	}
+
+	// Legacy AES-CBC (fixed IV) for backward compatibility
 	cipherText, err := base64.StdEncoding.DecodeString(cipherBase64)
 	if err != nil {
 		return "", err
@@ -64,7 +88,7 @@ func DecryptAES(cipherBase64 string) (string, error) {
 	mode := cipher.NewCBCDecrypter(block, iv)
 	plain := make([]byte, len(cipherText))
 	mode.CryptBlocks(plain, cipherText)
-	// 去除填充
+	// Remove PKCS7 padding
 	pad := int(plain[len(plain)-1])
 	if pad > aes.BlockSize || pad == 0 {
 		return "", errors.New("invalid padding")

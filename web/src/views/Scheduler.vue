@@ -10,8 +10,8 @@
           <el-tag type="success">{{ scheduler.active_tasks_count || 0 }}</el-tag>
         </div>
         <div style="display: flex; align-items: center;">
-          <span style="font-weight: bold; margin-right: 8px;">调度器状态</span>
-          <el-tag type="success">运行中</el-tag>
+          <span style="font-weight: bold; margin-right: 8px;">{{ schedulerStatusLabel }}</span>
+          <el-tag :type="schedulerStatusType">{{ schedulerStatusText }}</el-tag>
         </div>
       </div>
     </el-card>
@@ -72,8 +72,11 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
 const scheduler = ref({})
+const isSchedulerRunning = computed(() => scheduler.value.scheduler_running !== false)
+const schedulerStatusLabel = "调度器状态"
+const schedulerStatusText = computed(() => (isSchedulerRunning.value ? "运行中" : "已停止"))
+const schedulerStatusType = computed(() => (isSchedulerRunning.value ? "success" : "warning"))
 const loading = ref(false)
-let refreshTimer = null
 
 // 分页相关
 const activePage = ref(1)

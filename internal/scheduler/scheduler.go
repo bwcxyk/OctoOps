@@ -8,19 +8,20 @@ import (
 	seatunnelModel "octoops/internal/model/seatunnel"
 	aliyunService "octoops/internal/service/aliyun"
 	seatunnelService "octoops/internal/service/seatunnel"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/robfig/cron/v3"
 )
 
 var cronScheduler *cron.Cron
-var taskEntryMap map[uint]cron.EntryID // 存储任务ID到entry ID的映射
+var taskEntryMap map[uint]cron.EntryID // taskID -> entryID
+var schedulerRunning atomic.Bool
+var customTasks = map[uint]*CustomTask{}             // unified custom task store
+var etlTasksMap = map[uint]*seatunnelModel.EtlTask{} // taskID -> ETL task
 
-// 统一可管理任务结构
-var customTasks = map[uint]*CustomTask{}
-
-// 新增：ETL任务映射
-var etlTasksMap = map[uint]*seatunnelModel.EtlTask{}
+var mapsMu sync.RWMutex
 
 type CustomTask struct {
 	ID         uint          `json:"id"`
@@ -45,7 +46,12 @@ type JobStatusResult struct {
 func InitScheduler() {
 	cronScheduler = cron.New(cron.WithSeconds())
 	cronScheduler.Start()
+	schedulerRunning.Store(true)
+	mapsMu.Lock()
 	taskEntryMap = make(map[uint]cron.EntryID)
+	customTasks = map[uint]*CustomTask{}
+	etlTasksMap = map[uint]*seatunnelModel.EtlTask{}
+	mapsMu.Unlock()
 
 	// 加载数据库自定义任务
 	loadCustomTasksFromDB()
@@ -59,12 +65,15 @@ func InitScheduler() {
 // 加载所有活跃的定时任务
 func loadActiveTasks() {
 	var tasks []seatunnelModel.EtlTask
-	db.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks)
+	if err := db.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks).Error; err != nil {
+		log.Printf("[Scheduler] failed to load tasks: %v", err)
+		return
+	}
 
 	for _, task := range tasks {
-		err := AddTask(task)
-		if err != nil {
-			return
+		if err := AddTask(task); err != nil {
+			log.Printf("[Scheduler] failed to add task name=%s id=%d: %v", task.Name, task.ID, err)
+			continue
 		}
 	}
 
@@ -78,8 +87,12 @@ func AddTask(task seatunnelModel.EtlTask) error {
 	}
 
 	// 创建任务函数
+	taskCopy := task
 	taskFunc := func() {
-		executeTask(task)
+		if !schedulerRunning.Load() {
+			return
+		}
+		executeTask(taskCopy)
 	}
 
 	// 添加定时任务
@@ -89,28 +102,36 @@ func AddTask(task seatunnelModel.EtlTask) error {
 		return fmt.Errorf("添加ETL定时任务失败: %v", err)
 	}
 
-	// 保存任务ID到entry ID的映射
+	// Save task ID to entry ID mapping
+	mapsMu.Lock()
 	taskEntryMap[task.ID] = entryID
-	// 注册到 etlTasksMap
-	t := task // 创建副本
-	etlTasksMap[task.ID] = &t
+	// Register to etlTasksMap
+	etlTasksMap[task.ID] = &taskCopy
+	mapsMu.Unlock()
 	// nextRun 只保留日期和时间
-	nextRun := cronScheduler.Entry(entryID).Next.Format("2006-01-02 15:04:05")
+	entry := cronScheduler.Entry(entryID)
+	nextRunTime := computeNextRunFromEntry(entry, time.Now())
+	nextRun := nextRunTime.Format("2006-01-02 15:04:05")
 	log.Printf("[Scheduler][ETL任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.CronExpr, nextRun)
 	return nil
 }
 
 // 移除定时任务
 func RemoveTask(taskID uint) {
-	if entryID, exists := taskEntryMap[taskID]; exists {
-		cronScheduler.Remove(entryID)
+	mapsMu.Lock()
+	entryID, exists := taskEntryMap[taskID]
+	name := ""
+	if exists {
 		delete(taskEntryMap, taskID)
-		name := ""
 		if t, ok := etlTasksMap[taskID]; ok {
 			name = t.Name
 		}
 		delete(etlTasksMap, taskID)
-		log.Printf("[Scheduler][ETL任务] 移除成功 id=%d, name=%s", taskID, name)
+	}
+	mapsMu.Unlock()
+	if exists {
+		cronScheduler.Remove(entryID)
+		log.Printf("[Scheduler][ETL] removed id=%d, name=%s", taskID, name)
 	}
 }
 
@@ -121,24 +142,51 @@ func ReloadTasks() {
 
 // 重新加载所有任务
 func reloadTasks() {
-	// 停止当前调度器
-	cronScheduler.Stop()
+	// Stop current scheduler and wait with timeout
+	if cronScheduler != nil {
+		ctx := cronScheduler.Stop()
+		select {
+		case <-ctx.Done():
+			log.Println("[Scheduler] previous scheduler stopped")
+		case <-time.After(5 * time.Second):
+			log.Println("[Scheduler] stop timeout, switching to new scheduler")
+		}
+	}
 
-	// 创建新的调度器
-	cronScheduler = cron.New(cron.WithSeconds())
-	cronScheduler.Start()
-
-	// 清空映射
+	// Clear mappings and remove existing entries
+	mapsMu.Lock()
+	entryIDs := make([]cron.EntryID, 0, len(taskEntryMap))
+	for _, entryID := range taskEntryMap {
+		entryIDs = append(entryIDs, entryID)
+	}
+	for _, t := range customTasks {
+		if t.EntryID != 0 {
+			entryIDs = append(entryIDs, t.EntryID)
+		}
+	}
 	taskEntryMap = make(map[uint]cron.EntryID)
+	customTasks = map[uint]*CustomTask{}
+	etlTasksMap = map[uint]*seatunnelModel.EtlTask{}
+	mapsMu.Unlock()
+	for _, entryID := range entryIDs {
+		cronScheduler.Remove(entryID)
+	}
 
-	// 重新加载自定义任务
+	// Reload custom tasks
 	loadCustomTasksFromDB()
-	// 重新加载etl任务
+	// Reload ETL tasks
 	loadActiveTasks()
+	cronScheduler.Start()
+	schedulerRunning.Store(true)
 }
 
 // 执行任务
 func executeTask(task seatunnelModel.EtlTask) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Scheduler][Panic] ETL task crashed id=%d, name=%s, err=%v", task.ID, task.Name, r)
+		}
+	}()
 	log.Printf("开始执行定时任务: ID=%d, 名称=%s", task.ID, task.Name)
 
 	// 更新最后运行时间
@@ -169,7 +217,8 @@ func GetSchedulerStatus() map[string]interface{} {
 	for _, entry := range entries {
 		taskName := ""
 		taskType := ""
-		// 先查 customTasks
+		mapsMu.RLock()
+		// Check customTasks first
 		for _, t := range customTasks {
 			if t.EntryID == entry.ID {
 				taskName = t.Name
@@ -177,7 +226,7 @@ func GetSchedulerStatus() map[string]interface{} {
 				break
 			}
 		}
-		// 再查 ETL 任务
+		// Then check ETL tasks
 		if taskName == "" {
 			for _, t := range etlTasksMap {
 				if taskEntryMap[t.ID] == entry.ID {
@@ -187,6 +236,7 @@ func GetSchedulerStatus() map[string]interface{} {
 				}
 			}
 		}
+		mapsMu.RUnlock()
 		activeTasks = append(activeTasks, map[string]interface{}{
 			"entry_id":  entry.ID,
 			"task_name": taskName,
@@ -196,6 +246,7 @@ func GetSchedulerStatus() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
+		"scheduler_running":  schedulerRunning.Load(),
 		"active_tasks_count": len(activeTasks),
 		"active_tasks":       activeTasks,
 	}
@@ -203,7 +254,10 @@ func GetSchedulerStatus() map[string]interface{} {
 
 // 获取任务的下次执行时间
 func GetTaskNextRunTime(taskID uint) *time.Time {
-	if entryID, exists := taskEntryMap[taskID]; exists {
+	mapsMu.RLock()
+	entryID, exists := taskEntryMap[taskID]
+	mapsMu.RUnlock()
+	if exists {
 		entries := cronScheduler.Entries()
 		for _, entry := range entries {
 			if entry.ID == entryID {
@@ -217,7 +271,13 @@ func GetTaskNextRunTime(taskID uint) *time.Time {
 // 获取所有任务的下次执行时间
 func GetAllTasksNextRunTime() map[uint]*time.Time {
 	result := make(map[uint]*time.Time)
+	mapsMu.RLock()
+	keys := make([]uint, 0, len(taskEntryMap))
 	for taskID := range taskEntryMap {
+		keys = append(keys, taskID)
+	}
+	mapsMu.RUnlock()
+	for _, taskID := range keys {
 		nextRun := GetTaskNextRunTime(taskID)
 		if nextRun != nil {
 			result[taskID] = nextRun
@@ -236,49 +296,75 @@ func RegisterCustomTask(id uint, name, typ, spec string, status int, job func() 
 		Status: status,
 		Job:    job,
 	}
+	mapsMu.Lock()
 	customTasks[id] = task
+	mapsMu.Unlock()
 	if status == 1 {
 		addCustomTaskToCron(task)
 	}
 }
 
 func addCustomTaskToCron(task *CustomTask) {
-	entryID, err := cronScheduler.AddFunc(task.Spec, func() {
-		task.LastRun = time.Now()
-		result := task.Job()
-		task.LastResult = result
-		entry := cronScheduler.Entry(task.EntryID)
-		task.NextRun = entry.Next
+	var err error
+	jobFunc := func() {
+		if !schedulerRunning.Load() {
+			return
+		}
+		mapsMu.RLock()
+		currentEntryID := task.EntryID
+		mapsMu.RUnlock()
 
-		// 新增：同步写回数据库
+		mapsMu.Lock()
+		task.LastRun = time.Now()
+		mapsMu.Unlock()
+		result := task.Job()
+		mapsMu.Lock()
+		task.LastResult = result
+		if currentEntryID != 0 {
+			entry := cronScheduler.Entry(currentEntryID)
+			task.NextRun = computeNextRunFromEntry(entry, time.Now())
+		}
+		mapsMu.Unlock()
+
+		// Write back to database
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 			"last_run_time": task.LastRun,
 			"last_result":   task.LastResult,
 		})
 
-		// 新增：写入日志表
+		// Write task log
 		db.DB.Create(&model.TaskLog{
 			TaskName: task.Name,
 			Result:   result,
 			Status:   "success",
 		})
-	})
+	}
+	entryID, err := cronScheduler.AddFunc(task.Spec, jobFunc)
 	if err == nil {
+		mapsMu.Lock()
 		task.EntryID = entryID
-		task.NextRun = cronScheduler.Entry(entryID).Next
+		entry := cronScheduler.Entry(entryID)
+		task.NextRun = computeNextRunFromEntry(entry, time.Now())
+		mapsMu.Unlock()
 		nextRun := task.NextRun.Format("2006-01-02 15:04:05")
-		log.Printf("[Scheduler] [自定义任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
+		log.Printf("[Scheduler][Custom] added id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
 	} else {
-		log.Printf("[Scheduler] [自定义任务] 添加失败 id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
+		log.Printf("[Scheduler][Custom] add failed id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
 	}
 }
 
 func DisableCustomTask(id uint) {
+	mapsMu.Lock()
 	task, ok := customTasks[id]
+	entryID := cron.EntryID(0)
 	if ok && task.Status == 1 {
-		cronScheduler.Remove(task.EntryID)
+		entryID = task.EntryID
 		task.Status = 0
-		// 同步更新数据库
+	}
+	mapsMu.Unlock()
+	if ok && entryID != 0 {
+		cronScheduler.Remove(entryID)
+		// Update database
 		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 0)
 	}
 }
@@ -321,6 +407,10 @@ func GetJobFuncByType(customType string) func() string {
 func StartScheduler() {
 	if cronScheduler != nil {
 		cronScheduler.Start()
+		schedulerRunning.Store(true)
+		log.Println("[Scheduler] started")
+	} else {
+		log.Println("[Scheduler] start requested but scheduler is nil")
 	}
 }
 
@@ -328,5 +418,19 @@ func StartScheduler() {
 func StopScheduler() {
 	if cronScheduler != nil {
 		cronScheduler.Stop()
+		schedulerRunning.Store(false)
+		log.Println("[Scheduler] stopped")
+	} else {
+		log.Println("[Scheduler] stop requested but scheduler is nil")
 	}
+}
+
+func computeNextRunFromEntry(entry cron.Entry, now time.Time) time.Time {
+	if entry.Schedule != nil {
+		return entry.Schedule.Next(now)
+	}
+	if !entry.Next.IsZero() {
+		return entry.Next
+	}
+	return time.Time{}
 }

@@ -2,11 +2,9 @@ package alert
 
 import (
 	"bytes"
+	"html/template"
 	"octoops/internal/model/alert"
 	"octoops/internal/utils"
-	"text/template"
-
-	"github.com/russross/blackfriday/v2"
 )
 
 // 邮件测试发送
@@ -30,11 +28,9 @@ func SendEmailWithTemplate(alert *alert.Channel, tplContent string, data map[str
 	if err := tpl.Execute(&buf, data); err != nil {
 		return err
 	}
-	// markdown 转 html
-	htmlBody := string(blackfriday.Run(buf.Bytes()))
 	return utils.SendMail(utils.MailOptions{
 		To:      alert.Target,
 		Subject: "OctoOps 告警通知",
-		Body:    htmlBody,
+		Body:    buf.String(),
 	})
 }

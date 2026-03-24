@@ -28,7 +28,7 @@
         <template #default="scope">
           <el-button size="small" @click="openDialog(scope.row)">编辑</el-button>
           <el-button size="small" type="danger" @click="deleteChannel(scope.row)">删除</el-button>
-          <el-button size="small" @click="testChannel(scope.row)">测试发送</el-button>
+          <el-button size="small" @click="openTestDialog(scope.row)">测试发送</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -85,6 +85,28 @@
         <el-button type="primary" @click="saveChannel">保存</el-button>
       </template>
     </el-dialog>
+    <el-dialog v-model="testDialogVisible" title="测试发送" width="620px" :close-on-click-modal="false">
+      <el-form label-width="100px">
+        <el-form-item label="渠道名称">
+          <el-input v-model="testForm.channelName" disabled />
+        </el-form-item>
+        <el-form-item label="模板内容">
+          <el-input
+            v-model="testForm.templateContent"
+            type="textarea"
+            :rows="12"
+            placeholder="可选：输入模板内容，支持 {{ .time }} / {{ .message }} / {{ .channel }}"
+          />
+          <div style="font-size: 12px; color: #909399; margin-top: 4px;">
+            不填则发送默认测试消息
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="testDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="testing" @click="submitTestChannel">发送测试</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
@@ -101,6 +123,13 @@ const formRef = ref()
 const filterType = ref('')
 const templates = ref([])
 const templatesLoading = ref(false)
+const testDialogVisible = ref(false)
+const testing = ref(false)
+const testForm = ref({
+  channelId: null,
+  channelName: '',
+  templateContent: ''
+})
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
@@ -243,11 +272,27 @@ function toggleStatus(row) {
   })
 }
 
-function testChannel(row) {
-  axios.post(`/api/channels/${row.id}/test`).then(res => {
+function openTestDialog(row) {
+  testForm.value = {
+    channelId: row.id,
+    channelName: row.name,
+    templateContent: ''
+  }
+  testDialogVisible.value = true
+}
+
+function submitTestChannel() {
+  if (!testForm.value.channelId) return
+  testing.value = true
+  axios.post(`/api/channels/${testForm.value.channelId}/test`, {
+    template_content: testForm.value.templateContent
+  }).then(res => {
     ElMessage.success(res.data.message || '测试发送成功')
+    testDialogVisible.value = false
   }).catch(err => {
     ElMessage.error(err.response?.data?.error || '测试发送失败')
+  }).finally(() => {
+    testing.value = false
   })
 }
 
