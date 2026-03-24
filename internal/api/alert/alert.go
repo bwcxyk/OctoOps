@@ -7,6 +7,8 @@ import (
 	"octoops/internal/db"
 	alertModel "octoops/internal/model/alert"
 	alertService "octoops/internal/service/alert"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -66,12 +68,45 @@ func TestChannel(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
+	var req struct {
+		TemplateContent string `json:"template_content"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	templateContent := strings.TrimSpace(req.TemplateContent)
+
 	var err error
 	switch channel.Type {
 	case "email":
-		err = alertService.SendTestEmail(&channel)
+		if templateContent != "" {
+			err = alertService.SendEmailWithTemplate(&channel, templateContent, map[string]interface{}{
+				"channel": channel.Name,
+				"time":    time.Now().Format("2006-01-02 15:04:05"),
+				"message": "这是一条测试邮件通知。",
+			})
+		} else {
+			err = alertService.SendTestEmail(&channel)
+		}
 	case "dingtalk":
-		err = alertService.SendTestRobot(&channel)
+		if templateContent != "" {
+			err = alertService.SendDingTalkMarkdownWithTemplate(
+				channel.Target,
+				channel.DingtalkSecret,
+				"OctoOps 测试通知",
+				templateContent,
+				map[string]interface{}{
+					"channel": channel.Name,
+					"time":    time.Now().Format("2006-01-02 15:04:05"),
+					"message": "这是一条测试机器人通知。",
+				},
+			)
+		} else {
+			err = alertService.SendTestRobot(&channel)
+		}
 	case "wechat":
 		err = fmt.Errorf("暂未实现企业微信测试发送")
 	case "feishu":

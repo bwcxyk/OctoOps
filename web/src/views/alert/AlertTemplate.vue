@@ -53,7 +53,7 @@
       layout="total, prev, pager, next, jumper"
       style="margin-top: 16px; text-align: right;"
     />
-    <el-dialog v-model="editDialogVisible" :title="editForm.id ? '编辑模板' : '新增模板'" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="editDialogVisible" :title="editForm.id ? '编辑模板' : '新增模板'" width="860px" :close-on-click-modal="false">
       <el-form :model="editForm" :rules="rules" label-width="100px">
         <el-form-item label="模板名称" prop="name">
           <el-input v-model="editForm.name" />
@@ -67,7 +67,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="内容" prop="content">
-          <el-input type="textarea" v-model="editForm.content" :rows="6" />
+          <el-input type="textarea" v-model="editForm.content" :rows="12" />
         </el-form-item>
       </el-form>
       <template #footer>
