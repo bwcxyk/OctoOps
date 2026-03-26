@@ -59,12 +59,12 @@ func main() {
 	rbacApi.RegisterPermissionRoutes(apiGroup)
 
 	// 静态资源托管
-	r.Static("/assets", "./public/assets")
-	r.StaticFile("/favicon.ico", "./public/favicon.ico")
+	r.Static("/assets", "./frontend/assets")
+	r.StaticFile("/favicon.ico", "./frontend/favicon.ico")
 
 	// 首页路由 - 直接返回index.html
 	r.GET("/", func(c *gin.Context) {
-		c.File("./public/index.html")
+		c.File("./frontend/index.html")
 	})
 
 	// 其他所有前端路由 - 返回index.html
@@ -77,7 +77,7 @@ func main() {
 			return
 		}
 		// 非API路径都返回前端页面
-		c.File("./public/index.html")
+		c.File("./frontend/index.html")
 	})
 
 	// 优雅启动和关闭
