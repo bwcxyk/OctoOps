@@ -42,6 +42,12 @@ export default ({ mode }: ConfigEnv): UserConfig => {
       svgLoader(),
     ],
 
+    build: {
+      outDir: '../public',
+      emptyOutDir: true,
+      sourcemap: false,
+    },
+
     server: {
       port: 3002,
       host: '0.0.0.0',

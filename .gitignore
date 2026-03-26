@@ -35,10 +35,6 @@ Thumbs.db
 # 日志
 *.log
 
-# 环境变量
-.env
-.env.*
-
 # 其他
 npm-debug.log*
 yarn-debug.log*
