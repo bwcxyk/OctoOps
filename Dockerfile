@@ -19,7 +19,7 @@ RUN go mod download
 
 COPY . .
 
-COPY --from=frontend-build /app/public /app/public
+COPY --from=frontend-build /app/web/dist /app/public
 
 # 复制 example 文件为 config.yaml
 COPY config.yaml.example /app/config.yaml

@@ -54,7 +54,6 @@ export default ({ mode }: ConfigEnv): UserConfig => {
     ],
 
     build: {
-      outDir: '../public',
       emptyOutDir: true,
       sourcemap: false,
       rollupOptions: {
