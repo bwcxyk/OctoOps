@@ -19,8 +19,8 @@ typings/
 
 _site
 package
-tmp*
-temp*
+/tmp*
+/temp*
 coverage
 test-report.html
 .idea/
