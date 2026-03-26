@@ -1,6 +1,5 @@
 /* eslint-disable simple-import-sort/imports */
 import { createApp } from 'vue';
-import TDesign from 'tdesign-vue-next';
 
 import App from './App.vue';
 import router from './router';
@@ -13,7 +12,6 @@ import './permission';
 
 const app = createApp(App);
 
-app.use(TDesign);
 app.use(store);
 app.use(router);
 app.use(i18n);

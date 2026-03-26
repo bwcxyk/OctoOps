@@ -1,7 +1,10 @@
 import path from 'node:path';
 
+import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver';
 import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
+import AutoImport from 'unplugin-auto-import/vite';
+import Components from 'unplugin-vue-components/vite';
 import type { ConfigEnv, UserConfig } from 'vite';
 import { loadEnv } from 'vite';
 import { viteMockServe } from 'vite-plugin-mock';
@@ -35,6 +38,14 @@ export default ({ mode }: ConfigEnv): UserConfig => {
     plugins: [
       vue(),
       vueJsx(),
+      AutoImport({
+        dts: 'src/auto-imports.d.ts',
+        resolvers: [TDesignResolver({ library: 'vue-next' })],
+      }),
+      Components({
+        dts: 'src/components.d.ts',
+        resolvers: [TDesignResolver({ library: 'vue-next' })],
+      }),
       viteMockServe({
         mockPath: 'mock',
         enable: mode === 'mock',
@@ -46,6 +57,21 @@ export default ({ mode }: ConfigEnv): UserConfig => {
       outDir: '../public',
       emptyOutDir: true,
       sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules'))
+              return;
+
+            if (id.includes('echarts'))
+              return 'vendor-echarts';
+            if (id.includes('tdesign-vue-next') || id.includes('tdesign-icons-vue-next'))
+              return 'vendor-tdesign';
+            if (id.includes('vue-router') || id.includes('pinia') || id.includes('vue-i18n') || id.includes('/vue/'))
+              return 'vendor-vue';
+          },
+        },
+      },
     },
 
     server: {
