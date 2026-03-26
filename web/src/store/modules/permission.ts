@@ -1,11 +1,38 @@
 import { defineStore } from 'pinia';
 import type { RouteRecordRaw } from 'vue-router';
+import cloneDeep from 'lodash/cloneDeep';
 
-import type { RouteItem } from '@/api/model/permissionModel';
-import { getMenuList } from '@/api/permission';
 import router, { fixedRouterList, homepageRouterList } from '@/router';
 import { store } from '@/store';
-import { transformObjectToRoute } from '@/utils/route';
+
+function hasPermission(route: RouteRecordRaw, permissions: string[]) {
+  const requiredPermission = route.meta?.permission as string | undefined;
+  if (!requiredPermission) return true;
+  if (!permissions || !permissions.length) return false;
+  return permissions.includes('all') || permissions.includes(requiredPermission);
+}
+
+function filterRoutesByPermission(routes: RouteRecordRaw[], permissions: string[]) {
+  const routesCopy = cloneDeep(routes);
+
+  const loop = (list: RouteRecordRaw[]): RouteRecordRaw[] => {
+    return list
+      .map((route) => {
+        const children: RouteRecordRaw[] = route.children ? loop(route.children) : [];
+        const current: RouteRecordRaw = { ...route, children };
+        const canVisitCurrent = hasPermission(current, permissions);
+
+        if (children.length > 0) {
+          return current;
+        }
+
+        return canVisitCurrent ? current : null;
+      })
+      .filter(Boolean) as RouteRecordRaw[];
+  };
+
+  return loop(routesCopy);
+}
 
 export const usePermissionStore = defineStore('permission', {
   state: () => ({
@@ -13,28 +40,26 @@ export const usePermissionStore = defineStore('permission', {
     routers: [],
     removeRoutes: [],
     asyncRoutes: [],
+    isRoutesReady: false,
   }),
   actions: {
-    async initRoutes() {
-      const accessedRouters = this.asyncRoutes;
+    async initRoutes(permissions: string[] = []) {
+      const filterBaseRoutes = [...homepageRouterList, ...fixedRouterList];
+      const accessedRouters = permissions.length ? filterRoutesByPermission(filterBaseRoutes, permissions) : filterBaseRoutes;
 
       // 在菜单展示全部路由
-      this.routers = [...homepageRouterList, ...accessedRouters, ...fixedRouterList];
+      this.routers = accessedRouters;
       // 在菜单只展示动态路由和首页
       // this.routers = [...homepageRouterList, ...accessedRouters];
       // 在菜单只展示动态路由
       // this.routers = [...accessedRouters];
     },
-    async buildAsyncRoutes() {
-      try {
-        // 发起菜单权限请求 获取菜单列表
-        const asyncRoutes: Array<RouteItem> = (await getMenuList()).list;
-        this.asyncRoutes = transformObjectToRoute(asyncRoutes);
-        await this.initRoutes();
-        return this.asyncRoutes;
-      } catch (error) {
-        throw new Error("Can't build routes", error);
-      }
+    async buildAsyncRoutes(permissions: string[] = []) {
+      // 当前项目使用固定路由，不依赖后端菜单接口
+      this.asyncRoutes = [];
+      await this.initRoutes(permissions);
+      this.isRoutesReady = true;
+      return this.asyncRoutes;
     },
     async restoreRoutes() {
       // 不需要在此额外调用initRoutes更新侧边导肮内容，在登录后asyncRoutes为空会调用
@@ -44,6 +69,8 @@ export const usePermissionStore = defineStore('permission', {
         }
       });
       this.asyncRoutes = [];
+      this.routers = [];
+      this.isRoutesReady = false;
     },
   },
 });

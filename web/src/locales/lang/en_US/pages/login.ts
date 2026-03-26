@@ -3,7 +3,7 @@ export default {
   noAccount: 'No Account?',
   createAccount: 'Create Account',
   remember: 'Remember Account',
-  forget: 'Forget Account',
+  forget: 'Forgot Password',
   signIn: 'Sign in',
   existAccount: 'Exist Account?',
   refresh: 'refresh',

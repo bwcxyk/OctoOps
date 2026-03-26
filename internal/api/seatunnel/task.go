@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"octoops/internal/config"
 	"octoops/internal/db"
-	"octoops/internal/model"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	"octoops/internal/scheduler"
 	seatunnel "octoops/internal/service/seatunnel"
 	"strconv"
@@ -272,7 +272,7 @@ func UpdateTaskWithScheduler(c *gin.Context) {
 
 // 获取作业日志
 func ListTaskLogs(c *gin.Context) {
-	var logs []model.TaskLog
+	var logs []taskModel.TaskLog
 	query := db.DB
 	if taskName := c.Query("task_name"); taskName != "" {
 		query = query.Where("task_name LIKE ?", "%"+taskName+"%")
@@ -298,7 +298,7 @@ func ListTaskLogs(c *gin.Context) {
 	}
 
 	var total int64
-	query.Model(&model.TaskLog{}).Count(&total)
+	query.Model(&taskModel.TaskLog{}).Count(&total)
 	query = query.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize)
 	query.Find(&logs)
 

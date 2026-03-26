@@ -4,8 +4,8 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 const env = import.meta.env.MODE || 'development';
 
-// 导入homepage相关固定路由
-const homepageModules = import.meta.glob('./modules/**/homepage.ts', { eager: true });
+// 导入homepage相关固定路由（兼容 modules/homepage.ts 与 modules/**/homepage.ts）
+const homepageModules = import.meta.glob(['./modules/homepage.ts', './modules/**/homepage.ts'], { eager: true });
 
 // 导入modules非homepage相关固定路由
 const fixedModules = import.meta.glob('./modules/**/!(homepage).ts', { eager: true });

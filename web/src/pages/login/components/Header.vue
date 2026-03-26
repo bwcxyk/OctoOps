@@ -2,12 +2,6 @@
   <header class="login-header">
     <logo-full-icon class="logo" />
     <div class="operations-container">
-      <t-button theme="default" shape="square" variant="text" @click="navToGitHub">
-        <t-icon name="logo-github" class="icon" />
-      </t-button>
-      <t-button theme="default" shape="square" variant="text" @click="navToHelper">
-        <t-icon name="help-circle" class="icon" />
-      </t-button>
       <t-button theme="default" shape="square" variant="text" @click="toggleSettingPanel">
         <t-icon name="setting" class="icon" />
       </t-button>
@@ -25,13 +19,6 @@ const toggleSettingPanel = () => {
   });
 };
 
-const navToGitHub = () => {
-  window.open('https://github.com/tencent/tdesign-vue-next-starter');
-};
-
-const navToHelper = () => {
-  window.open('http://tdesign.tencent.com/starter/docs/get-started');
-};
 </script>
 <style lang="less" scoped>
 .login-header {

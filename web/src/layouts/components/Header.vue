@@ -23,34 +23,25 @@
           <!-- 全局通知 -->
           <notice />
 
-          <t-tooltip placement="bottom" :content="t('layout.header.code')">
-            <t-button theme="default" shape="square" variant="text" @click="navToGitHub">
-              <t-icon name="logo-github" />
-            </t-button>
-          </t-tooltip>
-          <t-tooltip placement="bottom" :content="t('layout.header.help')">
-            <t-button theme="default" shape="square" variant="text" @click="navToHelper">
-              <t-icon name="help-circle" />
-            </t-button>
-          </t-tooltip>
           <t-dropdown trigger="click">
             <t-button theme="default" shape="square" variant="text">
               <translate-icon />
             </t-button>
-            <t-dropdown>
+            <template #dropdown>
               <t-dropdown-item
                 v-for="(lang, index) in langList"
                 :key="index"
                 :value="lang.value"
-                @click="(options) => changeLang(options.value as string)"
-                >{{ lang.content }}</t-dropdown-item
-              ></t-dropdown
-            >
+                @click="changeLang(String(lang.value))"
+              >
+                {{ lang.content }}
+              </t-dropdown-item>
+            </template>
           </t-dropdown>
           <t-dropdown :min-column-width="120" trigger="click">
             <template #dropdown>
-              <t-dropdown-item class="operations-dropdown-container-item" @click="handleNav('/user/index')">
-                <user-circle-icon />{{ t('layout.header.user') }}
+              <t-dropdown-item class="operations-dropdown-container-item" @click="showChangePasswordDialog">
+                <t-icon name="lock-on" />{{ t('layout.header.changePassword') }}
               </t-dropdown-item>
               <t-dropdown-item class="operations-dropdown-container-item" @click="handleLogout">
                 <poweroff-icon />{{ t('layout.header.signOut') }}
@@ -72,14 +63,39 @@
         </div>
       </template>
     </t-head-menu>
+
+    <t-dialog
+      v-model:visible="changePasswordVisible"
+      :header="t('layout.header.changePassword')"
+      width="520px"
+      :confirm-btn="{ content: '确定', theme: 'primary', loading: changePasswordSubmitting }"
+      :cancel-btn="{ content: '取消' }"
+      @confirm="submitChangePassword"
+      @close="resetChangePasswordForm"
+    >
+      <t-form ref="changePasswordFormRef" :data="changePasswordForm" :rules="CHANGE_PASSWORD_RULES" label-width="100px">
+        <t-form-item name="old_password" label="原密码">
+          <t-input v-model="changePasswordForm.old_password" type="password" placeholder="请输入原密码" />
+        </t-form-item>
+        <t-form-item name="new_password" label="新密码">
+          <t-input v-model="changePasswordForm.new_password" type="password" placeholder="请输入新密码" />
+        </t-form-item>
+        <t-form-item name="confirm_password" label="确认密码">
+          <t-input v-model="changePasswordForm.confirm_password" type="password" placeholder="请再次输入新密码" />
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import { ChevronDownIcon, PoweroffIcon, SettingIcon, TranslateIcon, UserCircleIcon } from 'tdesign-icons-vue-next';
+import { ChevronDownIcon, PoweroffIcon, SettingIcon, TranslateIcon } from 'tdesign-icons-vue-next';
+import type { FormInstanceFunctions, FormRule } from 'tdesign-vue-next';
+import { MessagePlugin } from 'tdesign-vue-next';
 import type { PropType } from 'vue';
-import { computed } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { changePasswordApi } from '@/api/auth';
 import LogoFull from '@/assets/assets-logo-full.svg?component';
 import { prefix } from '@/config/global';
 import { langList, t } from '@/locales';
@@ -126,6 +142,19 @@ const { theme, layout, showLogo, menu, isFixed, isCompact } = defineProps({
 const router = useRouter();
 const settingStore = useSettingStore();
 const user = useUserStore();
+const changePasswordVisible = ref(false);
+const changePasswordSubmitting = ref(false);
+const changePasswordFormRef = ref<FormInstanceFunctions>();
+const changePasswordForm = reactive({
+  old_password: '',
+  new_password: '',
+  confirm_password: '',
+});
+const CHANGE_PASSWORD_RULES: Record<string, FormRule[]> = {
+  old_password: [{ required: true, message: '请输入原密码', type: 'error' }],
+  new_password: [{ required: true, message: '请输入新密码', type: 'error' }],
+  confirm_password: [{ required: true, message: '请确认新密码', type: 'error' }],
+};
 
 const toggleSettingPanel = () => {
   settingStore.updateConfig({
@@ -165,6 +194,41 @@ const handleNav = (url: string) => {
   router.push(url);
 };
 
+const resetChangePasswordForm = () => {
+  changePasswordForm.old_password = '';
+  changePasswordForm.new_password = '';
+  changePasswordForm.confirm_password = '';
+};
+
+const showChangePasswordDialog = () => {
+  changePasswordVisible.value = true;
+};
+
+const submitChangePassword = async () => {
+  const valid = await changePasswordFormRef.value?.validate();
+  if (valid !== true) return;
+  if (changePasswordForm.new_password !== changePasswordForm.confirm_password) {
+    MessagePlugin.warning('两次输入的新密码不一致');
+    return;
+  }
+
+  changePasswordSubmitting.value = true;
+  try {
+    await changePasswordApi({
+      old_password: changePasswordForm.old_password,
+      new_password: changePasswordForm.new_password,
+    });
+    MessagePlugin.success('修改密码成功，请重新登录');
+    changePasswordVisible.value = false;
+    await user.logout();
+    await router.push('/login');
+  } catch (error: unknown) {
+    MessagePlugin.error(error instanceof Error ? error.message : '修改密码失败');
+  } finally {
+    changePasswordSubmitting.value = false;
+  }
+};
+
 const handleLogout = () => {
   router.push({
     path: '/login',
@@ -172,13 +236,6 @@ const handleLogout = () => {
   });
 };
 
-const navToGitHub = () => {
-  window.open('https://github.com/tencent/tdesign-vue-next-starter');
-};
-
-const navToHelper = () => {
-  window.open('http://tdesign.tencent.com/starter/docs/get-started');
-};
 </script>
 <style lang="less" scoped>
 .@{starter-prefix}-header {

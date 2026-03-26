@@ -12,6 +12,7 @@ export default [
         en_US: 'Result',
       },
       icon: 'check-circle',
+      hidden: true,
     },
     children: [
       {

@@ -4,6 +4,7 @@ import type { LocationQueryRaw, RouteRecordName } from 'vue-router';
 export interface RouteMeta {
   title?: string | Record<string, string>;
   icon?: string;
+  permission?: string;
   expanded?: boolean;
   orderNo?: number;
   hidden?: boolean;
@@ -34,6 +35,7 @@ export type ModeType = 'dark' | 'light';
 export interface UserInfo {
   name: string;
   roles: string[];
+  permissions: string[];
 }
 
 export interface NotificationItem {

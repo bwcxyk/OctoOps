@@ -5,7 +5,7 @@
     <div class="login-container">
       <div class="title-container">
         <h1 class="title margin-no">{{ t('pages.login.loginTitle') }}</h1>
-        <h1 class="title">TDesign Starter</h1>
+        <h1 class="title">OctoOps</h1>
         <div class="sub-title">
           <p class="tip">{{ type === 'register' ? t('pages.login.existAccount') : t('pages.login.noAccount') }}</p>
           <p class="tip" @click="switchType(type === 'register' ? 'login' : 'register')">
@@ -19,10 +19,11 @@
       <tdesign-setting />
     </div>
 
-    <footer class="copyright">Copyright @ 2021-2025 Tencent. All Rights Reserved</footer>
+    <footer class="copyright">Copyright @ 2025-2026 OctoOps. All Rights Reserved</footer>
   </div>
 </template>
 <script setup lang="ts">
+import { MessagePlugin } from 'tdesign-vue-next';
 import { ref } from 'vue';
 
 import TdesignSetting from '@/layouts/setting.vue';
@@ -37,6 +38,10 @@ defineOptions({
 });
 const type = ref('login');
 const switchType = (val: string) => {
+  if (val === 'register') {
+    MessagePlugin.info('注册新账号功能待开发');
+    return;
+  }
   type.value = val;
 };
 </script>

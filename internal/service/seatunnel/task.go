@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"octoops/internal/config"
 	"octoops/internal/db"
-	"octoops/internal/model"
 	alertModel "octoops/internal/model/alert"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	alertService "octoops/internal/service/alert"
 	"strings"
 	"time"
@@ -104,7 +104,7 @@ func WriteTaskLogWithStatus(task seatunnelModel.EtlTask, octoopsRespBody []byte,
 	if v, ok := resultMap["jobName"].(string); ok {
 		taskName = v
 	}
-	db.DB.Create(&model.TaskLog{
+	db.DB.Create(&taskModel.TaskLog{
 		TaskName: taskName,
 		Result:   string(octoopsRespBody),
 		Status:   status,

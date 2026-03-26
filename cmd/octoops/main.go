@@ -5,11 +5,11 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"octoops/internal/api"
 	alertApi "octoops/internal/api/alert"
 	aliyunApi "octoops/internal/api/aliyun"
 	rbacApi "octoops/internal/api/rbac"
 	seatunnelApi "octoops/internal/api/seatunnel"
+	taskApi "octoops/internal/api/task"
 	"octoops/internal/config"
 	"octoops/internal/db"
 	"octoops/internal/pkg/jwt"
@@ -43,8 +43,8 @@ func main() {
 	rbacApi.RegisterAuthRoutes(apiGroup)
 
 	// 需要认证的路由
-	api.RegisterCustomTaskRoutes(apiGroup)
-	api.RegisterSchedulerRoutes(apiGroup)
+	taskApi.RegisterCustomTaskRoutes(apiGroup)
+	taskApi.RegisterSchedulerRoutes(apiGroup)
 	seatunnelApi.RegisterTaskRoutes(apiGroup)
 	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	// 告警相关路由

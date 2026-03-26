@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 	"octoops/internal/db"
-	"octoops/internal/model"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	aliyunService "octoops/internal/service/aliyun"
 	seatunnelService "octoops/internal/service/seatunnel"
 	"sync"
@@ -327,13 +327,13 @@ func addCustomTaskToCron(task *CustomTask) {
 		mapsMu.Unlock()
 
 		// Write back to database
-		db.DB.Model(&model.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+		db.DB.Model(&taskModel.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 			"last_run_time": task.LastRun,
 			"last_result":   task.LastResult,
 		})
 
 		// Write task log
-		db.DB.Create(&model.TaskLog{
+		db.DB.Create(&taskModel.TaskLog{
 			TaskName: task.Name,
 			Result:   result,
 			Status:   "success",
@@ -365,12 +365,12 @@ func DisableCustomTask(id uint) {
 	if ok && entryID != 0 {
 		cronScheduler.Remove(entryID)
 		// Update database
-		db.DB.Model(&model.CustomTask{}).Where("id = ?", id).Update("status", 0)
+		db.DB.Model(&taskModel.CustomTask{}).Where("id = ?", id).Update("status", 0)
 	}
 }
 
 func loadCustomTasksFromDB() {
-	var tasks []model.CustomTask
+	var tasks []taskModel.CustomTask
 	db.DB.Find(&tasks)
 	log.Printf("[Scheduler] 数据库加载自定义任务数量: %d", len(tasks))
 	for _, t := range tasks {
