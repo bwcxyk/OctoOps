@@ -13,12 +13,6 @@ export default [
     },
     children: [
       {
-        path: 'group',
-        name: 'AlertGroup',
-        component: () => import('@/pages/alert/group/index.vue'),
-        meta: { title: { zh_CN: '告警组', en_US: 'Alert Group' }, permission: 'notify:group' },
-      },
-      {
         path: 'template',
         name: 'AlertTemplate',
         component: () => import('@/pages/alert/template/index.vue'),
@@ -29,6 +23,12 @@ export default [
         name: 'AlertChannel',
         component: () => import('@/pages/alert/channel/index.vue'),
         meta: { title: { zh_CN: '告警渠道', en_US: 'Alert Channel' }, permission: 'notify:channel' },
+      },
+      {
+        path: 'group',
+        name: 'AlertGroup',
+        component: () => import('@/pages/alert/group/index.vue'),
+        meta: { title: { zh_CN: '告警组', en_US: 'Alert Group' }, permission: 'notify:group' },
       },
     ],
   },

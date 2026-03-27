@@ -1,17 +1,20 @@
 package seatunnel
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"octoops/internal/config"
 	"octoops/internal/db"
 	alertModel "octoops/internal/model/alert"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	taskModel "octoops/internal/model/task"
 	alertService "octoops/internal/service/alert"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,21 +35,23 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 		format = "json"
 	}
 
-	// 构建URL
-	url := config.SeatunnelBaseURL + "/submit-job?format=" + format
+	// 构建URL（使用查询参数编码，避免任务名包含空格或中文时请求异常）
+	params := url.Values{}
+	params.Set("format", format)
 	// 只有在使用 SavePoint 启动时才传递 jobId，否则不传，让 Seatunnel 生成新的 jobId
 	if isStartWithSavePoint && task.TaskType == "stream" && task.JobID != nil && *task.JobID != "" {
-		url += "&jobId=" + *task.JobID
+		params.Set("jobId", *task.JobID)
 	}
 	if task.Name != "" {
-		url += "&jobName=" + task.Name
+		params.Set("jobName", task.Name)
 	}
 	if isStartWithSavePoint {
-		url += "&isStartWithSavePoint=true"
+		params.Set("isStartWithSavePoint", "true")
 	}
+	requestURL := config.SeatunnelBaseURL + "/submit-job?" + params.Encode()
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "text/plain; charset=utf-8", strings.NewReader(task.Config))
+	resp, err := client.Post(requestURL, "text/plain; charset=utf-8", strings.NewReader(task.Config))
 	if err != nil {
 		return nil, fmt.Errorf("提交作业失败: %v", err)
 	}
@@ -73,17 +78,19 @@ func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
 // 从响应体中提取 jobId 并更新到数据库
 func UpdateJobIdFromResponse(taskID uint, octoopsRespBody []byte) {
 	var resultMap map[string]interface{}
-	if err := json.Unmarshal(octoopsRespBody, &resultMap); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(octoopsRespBody))
+	decoder.UseNumber()
+	if err := decoder.Decode(&resultMap); err != nil {
 		log.Printf("[DEBUG] 解析响应失败: %v", err)
 		return
 	}
 
 	// 尝试从响应中提取 jobId
 	jobID := ""
-	if v, ok := resultMap["jobId"].(string); ok && v != "" {
-		jobID = v
-	} else if v, ok := resultMap["job_id"].(string); ok && v != "" {
-		jobID = v
+	if raw, ok := resultMap["jobId"]; ok {
+		jobID = normalizeJobID(raw)
+	} else if raw, ok := resultMap["job_id"]; ok {
+		jobID = normalizeJobID(raw)
 	}
 
 	// 如果找到 jobId，更新到数据库
@@ -93,6 +100,20 @@ func UpdateJobIdFromResponse(taskID uint, octoopsRespBody []byte) {
 		} else {
 			log.Printf("[INFO] jobId 更新成功: taskID=%d, jobId=%s", taskID, jobID)
 		}
+	}
+}
+
+func normalizeJobID(raw interface{}) string {
+	switch v := raw.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case json.Number:
+		return v.String()
+	case float64:
+		// 兼容未启用 UseNumber 的场景
+		return strconv.FormatInt(int64(v), 10)
+	default:
+		return ""
 	}
 }
 

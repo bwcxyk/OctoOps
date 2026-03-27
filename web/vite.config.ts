@@ -78,7 +78,8 @@ export default ({ mode }: ConfigEnv): UserConfig => {
       host: '0.0.0.0',
       proxy: {
         [VITE_API_URL_PREFIX]: {
-          target: VITE_API_URL || 'http://127.0.0.1:8080',
+          target: VITE_API_URL || 'http://127.0.0.1:8080', // 本地开发环境
+          // target: 'http://octoops.huolan.sh', // 测试环境
           changeOrigin: true,
         },
       },

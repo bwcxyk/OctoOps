@@ -187,9 +187,26 @@ func SubmitJob(c *gin.Context) {
 	// 从响应中提取 jobId 并更新到数据库
 	seatunnel.UpdateJobIdFromResponse(taskID, respBody)
 
+	// 提交成功后短轮询同步作业状态，避免前端短时间内看不到状态变化
+	jobStatus := "UNKNOWN"
+	for i := 0; i < 3; i++ {
+		status, syncErr := seatunnel.SyncJobStatusByTaskID(taskID)
+		if syncErr != nil {
+			log.Printf("[ETL] 同步作业状态失败: taskID=%d, error=%v", taskID, syncErr)
+		} else {
+			jobStatus = status
+			if status != "UNKNOWN" {
+				break
+			}
+		}
+		if i < 2 {
+			time.Sleep(1 * time.Second)
+		}
+	}
+
 	log.Printf("[ETL] 提交作业成功: taskID=%d, type=%s, isStartWithSavePoint=%v, result=%s", taskID, task.TaskType, isStartWithSavePoint, string(respBody))
 
-	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功"})
+	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功", "job_status": jobStatus})
 }
 
 // 停止作业
@@ -208,7 +225,11 @@ func StopJob(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is empty in database"})
 		return
 	}
-	isStopWithSavePoint := c.Query("isStopWithSavePoint")
+	isStopWithSavePoint := c.DefaultQuery("isStopWithSavePoint", "false")
+	if isStopWithSavePoint != "true" && isStopWithSavePoint != "false" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "isStopWithSavePoint must be true or false"})
+		return
+	}
 	body := fmt.Sprintf(`{"jobId": "%s", "isStopWithSavePoint": %s}`, *task.JobID, isStopWithSavePoint)
 	url := config.SeatunnelBaseURL + "/stop-job"
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
