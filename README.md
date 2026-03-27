@@ -1,114 +1,138 @@
-# octoops 一体化部署说明
+# OctoOps
 
-## 项目简介
+一套前后端一体化的任务调度与作业管理平台。
 
-octoops 是一套前后端一体化的任务调度与作业管理平台，包含：
+- 后端：Go + Gin，提供任务调度、RBAC、告警、作业相关 API
+- 前端：Vue 3 + TypeScript + TDesign（位于 `web/`）
+- 部署：支持 Docker 一体化部署
 
-- **后端**：Go 语言开发，支持任务调度、RBAC 权限、作业日志、告警等
-- **前端**：Vue3 + Element Plus，现代化管理界面
+## 功能概览
 
----
+- 任务中心：调度器、自定义任务、任务日志
+- 数据集成：SeaTunnel（流式 / 离线）
+- 云资源：阿里云相关能力
+- 告警体系：告警渠道、告警组、告警模板
+- 权限体系：用户、角色、权限（RBAC）
 
-## 快速开始
+## 快速开始（Docker 推荐）
 
-### 1. 构建镜像
-
-确保已安装 Docker，且当前目录为项目根目录。
+### 1) 构建镜像
 
 ```bash
-# 构建一体化镜像
-# 推荐使用国内源加速（如有需要）
 docker build -t octoops-allinone .
 ```
 
-### 2. 运行容器
-
-启动容器
+### 2) 启动服务
 
 ```bash
-docker run -d -p 8080:8080 --name octoops octoops-allinone
+docker run -d --name octoops -p 8080:8080 octoops-allinone
 ```
 
-进入容器初始化RBAC数据
+### 3) 初始化 RBAC 与管理员账号
 
 ```bash
 docker exec -it octoops /app/octoops-init
 ```
 
-- 访问 `http://<服务器IP>:8080` 即可进入 octoops 管理平台
-- 所有 API 也通过该端口对外提供
+初始化后会创建默认管理员：
 
-### 3. 前端开发调试（可选）
+- 用户名：`admin`
+- 密码：`admin123`
 
-如需本地开发前端，可单独运行：
+首次登录后请立即修改密码。
+
+### 4) 访问系统
+
+- 前端页面：`http://<服务器IP>:8080`
+- API 入口：`http://<服务器IP>:8080/api`
+
+## 本地开发
+
+### 前置依赖
+
+- Go（建议 1.24+）
+- Node.js（建议 20+）
+- PostgreSQL
+- 可选：SeaTunnel、SMTP 服务、Docker
+
+### 后端开发
+
+1. 复制配置文件并按需修改：
+
+```bash
+cp config.yaml.example config.yaml
+```
+
+2. 启动后端：
+
+```bash
+go run ./cmd/octoops/main.go
+```
+
+后端默认监听 `8080` 端口。
+
+### 前端开发
 
 ```bash
 cd web
 npm install
 npm run dev
 ```
-前端会自动代理 API 请求到本地后端（见 `web/vite.config.js` 配置）
 
----
+- 前端开发服务默认端口：`3002`
+- 开发代理配置在 `web/vite.config.ts`，默认会代理到 `http://127.0.0.1:8080`
 
-## 目录结构说明
+## 配置说明
 
-```
+核心配置文件为 `config.yaml`，可基于 `config.yaml.example` 修改。
+
+主要配置项：
+
+- `postgres`：数据库连接信息
+- `octoops.auth.jwt_secret`：JWT 密钥
+- `octoops.mail`：SMTP 邮件告警配置
+- `seatunnel.base_url`：SeaTunnel API 地址
+- `octoops.aliyun.aes_key`：阿里云密钥加密用 AES Key（32 字节）
+
+## 项目结构
+
+```text
 octoops/
-├── cmd/                  # 后端启动入口（如 cmd/octoops/main.go）
-├── internal/             # 后端核心代码
-│   ├── api/              # 路由与 API 控制器（rbac, seatunnel, alert, aliyun, custom_task等）
-│   ├── config/           # 配置加载
-│   ├── db/               # 数据库初始化
-│   ├── middleware/       # Gin 中间件（如认证、RBAC）
-│   ├── model/            # 数据模型（rbac, seatunnel, alert, aliyun, custom_task等）
-│   ├── pkg/              # JWT等通用包
-│   ├── scheduler/        # 调度核心逻辑
-│   ├── service/          # 业务服务层（alert, aliyun, seatunnel等）
-│   └── utils/            # 工具函数（加密、邮件等）
-├── web/                  # 前端源码（Vue3 + Element Plus）
-│   ├── src/
-│   │   ├── api/          # 前端 API 封装
-│   │   ├── components/   # 通用组件
-│   │   ├── layouts/      # 页面布局
-│   │   ├── store/        # 状态管理
-│   │   ├── utils/        # 前端工具
-│   │   ├── views/        # 业务页面（rbac、seatunnel、alert等）
-│   │   └── main.js       # 前端入口
-│   ├── public/           # 前端静态资源
-│   ├── package.json      # 前端依赖
-│   └── vite.config.js    # 前端构建配置
-├── config.yaml           # 主配置文件
-├── config.yaml.example   # 配置模板
-├── Dockerfile            # 一体化构建脚本
-├── go.mod                # Go 依赖
-├── go.sum
-└── README.md             # 项目说明
+├── cmd/                    # 可执行入口（服务、初始化脚本）
+│   ├── octoops/            # 主服务入口
+│   └── init-rbac/          # RBAC 初始化入口
+├── internal/               # 后端核心代码（api/service/model/scheduler 等）
+├── web/                    # 前端工程（Vue3 + TS + TDesign）
+├── config.yaml.example     # 配置模板
+├── Dockerfile              # 一体化构建与运行镜像
+└── README.md
 ```
 
----
+## 常见问题（FAQ）
 
-## 常见问题 FAQ
+1. 页面 404 或空白怎么办？
 
-1. **如何更新前端页面？**
-   - 修改 `web` 目录下代码后，重新构建镜像即可。
+- 先确认后端服务已正常启动且监听 `8080`。
+- 如果是本地运行后端，请确认 `frontend/` 静态资源存在（Docker 构建会自动生成并复制）。
 
-2. **如何自定义端口？**
-   - 修改 `cmd/octoops/main.go` 中的监听端口，或运行容器时映射其他端口。
+2. 前端请求接口失败怎么办？
 
-3. **访问页面空白或 404？**
-   - 请确保前端已正确构建，且 `web/public` 目录下有内容。
-   - 通过 Dockerfile 构建时会自动完成此步骤。
+- 检查 `web/vite.config.ts` 中的代理目标地址。
+- 检查后端 `8080` 端口与数据库连接是否正常。
 
-4. **API 无法访问？**
-   - 检查容器端口映射和防火墙设置。
+3. 如何更新前端页面？
 
----
+- 修改 `web/` 代码后，重新执行 `npm run build`（或重新构建 Docker 镜像）。
 
-## 贡献与反馈
+4. 如何更改服务端口？
 
-如有建议或问题，欢迎提 Issue 或 PR。
+- 当前端口在 `cmd/octoops/main.go` 中固定为 `:8080`，修改后重新构建/启动即可。
 
----
+## 相关文档
 
-感谢使用 octoops！ 
+- 前端说明：`web/README.md`
+- 前端发布流程：`web/PUBLISH.md`
+
+## 贡献
+
+欢迎提交 Issue 或 Pull Request 来改进项目。
