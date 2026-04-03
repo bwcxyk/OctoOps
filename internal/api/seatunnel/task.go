@@ -24,6 +24,25 @@ type TaskWithNextRun struct {
 	NextRunTime *time.Time `json:"next_run_time,omitempty"`
 }
 
+func waitForTaskStatus(taskID uint, attempts int, interval time.Duration, shouldStop func(string) bool) string {
+	jobStatus := "UNKNOWN"
+	for i := 0; i < attempts; i++ {
+		status, syncErr := seatunnel.SyncJobStatusByTaskID(taskID)
+		if syncErr != nil {
+			log.Printf("[ETL] 同步作业状态失败: taskID=%d, error=%v", taskID, syncErr)
+		} else {
+			jobStatus = status
+			if shouldStop(status) {
+				return jobStatus
+			}
+		}
+		if i < attempts-1 {
+			time.Sleep(interval)
+		}
+	}
+	return jobStatus
+}
+
 func ListTasks(c *gin.Context) {
 	var tasks []seatunnelModel.EtlTask
 	query := db.DB
@@ -187,26 +206,17 @@ func SubmitJob(c *gin.Context) {
 	// 从响应中提取 jobId 并更新到数据库
 	seatunnel.UpdateJobIdFromResponse(taskID, respBody)
 
-	// 提交成功后短轮询同步作业状态，避免前端短时间内看不到状态变化
-	jobStatus := "UNKNOWN"
-	for i := 0; i < 3; i++ {
-		status, syncErr := seatunnel.SyncJobStatusByTaskID(taskID)
-		if syncErr != nil {
-			log.Printf("[ETL] 同步作业状态失败: taskID=%d, error=%v", taskID, syncErr)
-		} else {
-			jobStatus = status
-			if status != "UNKNOWN" {
-				break
-			}
-		}
-		if i < 2 {
-			time.Sleep(1 * time.Second)
-		}
-	}
+	// 提交成功后等待作业进入明确状态，前端只需刷新一次列表
+	jobStatus := waitForTaskStatus(taskID, 15, time.Second, func(status string) bool {
+		return status == "RUNNING" || status == "FAILED" || status == "FINISHED" || status == "CANCEL"
+	})
 
 	log.Printf("[ETL] 提交作业成功: taskID=%d, type=%s, isStartWithSavePoint=%v, result=%s", taskID, task.TaskType, isStartWithSavePoint, string(respBody))
 
-	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功", "job_status": jobStatus})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "作业提交成功",
+		"job_status": jobStatus,
+	})
 }
 
 // 停止作业
@@ -240,8 +250,23 @@ func StopJob(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
-	log.Printf("[ETL] 停止作业成功: taskID=%d, jobId=%s", task.ID, *task.JobID)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[ETL] 停止作业失败: taskID=%d, jobId=%s, statusCode=%d, response=%s", task.ID, *task.JobID, resp.StatusCode, string(respBody))
+		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+		return
+	}
+
+	// 停止成功后等待状态退出 RUNNING，前端只需刷新一次列表
+	jobStatus := waitForTaskStatus(task.ID, 15, time.Second, func(status string) bool {
+		return status != "" && status != "RUNNING" && status != "UNKNOWN"
+	})
+
+	log.Printf("[ETL] 停止作业成功: taskID=%d, jobId=%s, jobStatus=%s", task.ID, *task.JobID, jobStatus)
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "作业停止成功",
+		"job_status": jobStatus,
+		"result":     string(respBody),
+	})
 }
 
 // 更新任务时同步更新调度器

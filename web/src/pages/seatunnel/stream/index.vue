@@ -474,9 +474,7 @@ async function doSubmitJob() {
     });
     MessagePlugin.success('提交作业成功');
     submitDialogVisible.value = false;
-    setTimeout(() => {
-      fetchTasks();
-    }, 3000);
+    await fetchTasks();
   } catch (error: unknown) {
     console.error(error);
     MessagePlugin.error(error instanceof Error ? error.message : '提交作业失败');
@@ -495,9 +493,7 @@ async function doStopJob() {
     });
     MessagePlugin.success('停止作业成功');
     stopDialogVisible.value = false;
-    setTimeout(() => {
-      fetchTasks();
-    }, 3000);
+    await fetchTasks();
   } catch (error: unknown) {
     console.error(error);
     MessagePlugin.error(error instanceof Error ? error.message : '停止作业失败');
