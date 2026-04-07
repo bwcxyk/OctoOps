@@ -39,7 +39,7 @@ ecs:DescribeSecurityGroupAttribute</pre
               </div>
             </template>
             <t-button variant="text" theme="default" shape="square" class="tips-icon-btn">
-              <t-icon name="help-circle" />
+              <t-icon name="info-circle" />
             </t-button>
           </t-popup>
         </div>
