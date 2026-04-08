@@ -7,6 +7,7 @@ import AutoImport from 'unplugin-auto-import/vite';
 import Components from 'unplugin-vue-components/vite';
 import type { ConfigEnv, UserConfig } from 'vite';
 import { loadEnv } from 'vite';
+import viteCompression from 'vite-plugin-compression';
 import { viteMockServe } from 'vite-plugin-mock';
 import svgLoader from 'vite-svg-loader';
 
@@ -51,13 +52,23 @@ export default ({ mode }: ConfigEnv): UserConfig => {
         enable: mode === 'mock',
       }),
       svgLoader(),
+      viteCompression({
+        algorithm: 'gzip',
+        ext: '.gz',
+        threshold: 10240,
+        deleteOriginFile: false,
+      }),
     ],
 
     build: {
       emptyOutDir: true,
       sourcemap: false,
+      chunkSizeWarningLimit: 1500,
       rollupOptions: {
         output: {
+          entryFileNames: 'assets/js/[name]-[hash].js',
+          chunkFileNames: 'assets/js/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]',
           manualChunks(id) {
             if (!id.includes('node_modules'))
               return;
