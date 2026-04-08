@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 	"octoops/internal/config"
-	"octoops/internal/model"
 	alertModel "octoops/internal/model/alert"
 	aliyunModel "octoops/internal/model/aliyun"
 	rbacModel "octoops/internal/model/rbac"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -42,8 +42,8 @@ func Init() {
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},
-		&model.CustomTask{},
-		&model.TaskLog{},
+		&taskModel.CustomTask{},
+		&taskModel.TaskLog{},
 		// RBAC相关模型
 		&rbacModel.User{},
 		&rbacModel.Role{},

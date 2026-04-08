@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"octoops/internal/config"
 	"octoops/internal/db"
-	"octoops/internal/model"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	"octoops/internal/scheduler"
 	seatunnel "octoops/internal/service/seatunnel"
 	"strconv"
@@ -22,6 +22,25 @@ import (
 type TaskWithNextRun struct {
 	seatunnelModel.EtlTask
 	NextRunTime *time.Time `json:"next_run_time,omitempty"`
+}
+
+func waitForTaskStatus(taskID uint, attempts int, interval time.Duration, shouldStop func(string) bool) string {
+	jobStatus := "UNKNOWN"
+	for i := 0; i < attempts; i++ {
+		status, syncErr := seatunnel.SyncJobStatusByTaskID(taskID)
+		if syncErr != nil {
+			log.Printf("[ETL] 同步作业状态失败: taskID=%d, error=%v", taskID, syncErr)
+		} else {
+			jobStatus = status
+			if shouldStop(status) {
+				return jobStatus
+			}
+		}
+		if i < attempts-1 {
+			time.Sleep(interval)
+		}
+	}
+	return jobStatus
 }
 
 func ListTasks(c *gin.Context) {
@@ -187,9 +206,17 @@ func SubmitJob(c *gin.Context) {
 	// 从响应中提取 jobId 并更新到数据库
 	seatunnel.UpdateJobIdFromResponse(taskID, respBody)
 
+	// 提交成功后等待作业进入明确状态，前端只需刷新一次列表
+	jobStatus := waitForTaskStatus(taskID, 15, time.Second, func(status string) bool {
+		return status == "RUNNING" || status == "FAILED" || status == "FINISHED" || status == "CANCEL"
+	})
+
 	log.Printf("[ETL] 提交作业成功: taskID=%d, type=%s, isStartWithSavePoint=%v, result=%s", taskID, task.TaskType, isStartWithSavePoint, string(respBody))
 
-	c.JSON(http.StatusOK, gin.H{"message": "作业提交成功"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "作业提交成功",
+		"job_status": jobStatus,
+	})
 }
 
 // 停止作业
@@ -208,7 +235,11 @@ func StopJob(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "jobId is empty in database"})
 		return
 	}
-	isStopWithSavePoint := c.Query("isStopWithSavePoint")
+	isStopWithSavePoint := c.DefaultQuery("isStopWithSavePoint", "false")
+	if isStopWithSavePoint != "true" && isStopWithSavePoint != "false" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "isStopWithSavePoint must be true or false"})
+		return
+	}
 	body := fmt.Sprintf(`{"jobId": "%s", "isStopWithSavePoint": %s}`, *task.JobID, isStopWithSavePoint)
 	url := config.SeatunnelBaseURL + "/stop-job"
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
@@ -219,8 +250,23 @@ func StopJob(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
-	log.Printf("[ETL] 停止作业成功: taskID=%d, jobId=%s", task.ID, *task.JobID)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[ETL] 停止作业失败: taskID=%d, jobId=%s, statusCode=%d, response=%s", task.ID, *task.JobID, resp.StatusCode, string(respBody))
+		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+		return
+	}
+
+	// 停止成功后等待状态退出 RUNNING，前端只需刷新一次列表
+	jobStatus := waitForTaskStatus(task.ID, 15, time.Second, func(status string) bool {
+		return status != "" && status != "RUNNING" && status != "UNKNOWN"
+	})
+
+	log.Printf("[ETL] 停止作业成功: taskID=%d, jobId=%s, jobStatus=%s", task.ID, *task.JobID, jobStatus)
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "作业停止成功",
+		"job_status": jobStatus,
+		"result":     string(respBody),
+	})
 }
 
 // 更新任务时同步更新调度器
@@ -272,7 +318,7 @@ func UpdateTaskWithScheduler(c *gin.Context) {
 
 // 获取作业日志
 func ListTaskLogs(c *gin.Context) {
-	var logs []model.TaskLog
+	var logs []taskModel.TaskLog
 	query := db.DB
 	if taskName := c.Query("task_name"); taskName != "" {
 		query = query.Where("task_name LIKE ?", "%"+taskName+"%")
@@ -298,7 +344,7 @@ func ListTaskLogs(c *gin.Context) {
 	}
 
 	var total int64
-	query.Model(&model.TaskLog{}).Count(&total)
+	query.Model(&taskModel.TaskLog{}).Count(&total)
 	query = query.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize)
 	query.Find(&logs)
 

@@ -1,0 +1,50 @@
+<template>
+  <div class="login-wrapper">
+    <login-header />
+
+    <div class="login-container">
+      <div class="title-container">
+        <h1 class="title margin-no">{{ t('pages.login.loginTitle') }}</h1>
+        <h1 class="title">OctoOps</h1>
+        <div class="sub-title">
+          <p class="tip">{{ type === 'register' ? t('pages.login.existAccount') : t('pages.login.noAccount') }}</p>
+          <p class="tip" @click="switchType(type === 'register' ? 'login' : 'register')">
+            {{ type === 'register' ? t('pages.login.signIn') : t('pages.login.createAccount') }}
+          </p>
+        </div>
+      </div>
+
+      <login v-if="type === 'login'" />
+      <register v-else @register-success="switchType('login')" />
+      <tdesign-setting />
+    </div>
+
+    <footer class="copyright">Copyright @ 2025-2026 OctoOps. All Rights Reserved</footer>
+  </div>
+</template>
+<script setup lang="ts">
+import { MessagePlugin } from 'tdesign-vue-next';
+import { ref } from 'vue';
+
+import TdesignSetting from '@/layouts/setting.vue';
+import { t } from '@/locales';
+
+import LoginHeader from './components/Header.vue';
+import Login from './components/Login.vue';
+import Register from './components/Register.vue';
+
+defineOptions({
+  name: 'LoginIndex',
+});
+const type = ref('login');
+const switchType = (val: string) => {
+  if (val === 'register') {
+    MessagePlugin.info('注册新账号功能待开发');
+    return;
+  }
+  type.value = val;
+};
+</script>
+<style lang="less" scoped>
+@import './index.less';
+</style>

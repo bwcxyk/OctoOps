@@ -32,14 +32,14 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	// 1. 一级菜单
 	menuDefs := []struct {
 		Name, Code, Desc, Path string
-		OrderNum int
+		OrderNum               int
 	}{
-		{"系统总览", "overview", "系统总览页面", "/overview", 1},
-		{"阿里云", "aliyun", "阿里云相关", "", 2},
-		{"ETL调度", "etl", "ETL调度相关", "", 3},
-		{"任务管理", "task", "任务管理相关", "", 4},
-		{"消息通知", "notify", "消息通知相关", "", 5},
-		{"系统管理", "rbac", "系统管理相关", "", 6},
+		{"仪表盘", "dashboard", "仪表盘页面", "/dashboard", 0},
+		{"阿里云", "aliyun", "阿里云相关", "/aliyun", 1},
+		{"Seatunnel", "seatunnel", "Seatunnel相关", "/seatunnel", 2},
+		{"任务中心", "task", "任务管理相关", "/task", 3},
+		{"告警管理", "notify", "消息通知相关", "/alert", 4},
+		{"权限管理", "rbac", "系统管理相关", "/rbac", 5},
 	}
 	menuMap := make(map[string]*model.Permission)
 	for _, m := range menuDefs {
@@ -61,21 +61,24 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	// 2. 二级菜单
 	subMenuDefs := []struct {
 		Name, Code, Desc, Parent, Path string
-		OrderNum int
+		OrderNum                       int
 	}{
+		// 仪表盘
+		{"基础仪表盘", "dashboard:base", "基础仪表盘", "dashboard", "/dashboard/base", 1},
+		{"详情仪表盘", "dashboard:detail", "详情仪表盘", "dashboard", "/dashboard/detail", 2},
 		// 阿里云
-		{"ECS安全组", "aliyun:ecs_sg", "ECS安全组", "aliyun", "/ecs-security-group", 1},
+		{"ECS安全组", "aliyun:ecs_sg", "ECS安全组", "aliyun", "/aliyun/ecs-security-group", 1},
 		// ETL调度
-		{"离线数据集成", "etl:batch", "离线数据集成", "etl", "/batchtask", 1},
-		{"实时数据集成", "etl:stream", "实时数据集成", "etl", "/streamtask", 2},
+		{"实时数据集成", "etl:stream", "实时数据集成", "seatunnel", "/seatunnel/stream", 1},
+		{"离线数据集成", "etl:batch", "离线数据集成", "seatunnel", "/seatunnel/batch", 2},
 		// 任务管理
-		{"定时任务", "task:schedule", "定时任务", "task", "/task/timer", 1},
-		{"调度器", "task:scheduler", "调度器", "task", "/scheduler", 2},
-		{"任务日志", "task:log", "任务日志", "task", "/tasklog", 3},
+		{"调度器", "task:scheduler", "调度器", "task", "/task/scheduler", 1},
+		{"自定义任务", "task:schedule", "自定义任务", "task", "/task/custom", 2},
+		{"任务日志", "task:log", "任务日志", "task", "/task/log", 3},
 		// 消息通知
-		{"告警模板", "notify:template", "告警模板", "notify", "/alert-template", 1},
-		{"告警渠道", "notify:channel", "告警渠道", "notify", "/alert-channel", 2},
-		{"告警组管理", "notify:group", "告警组管理", "notify", "/alert-group", 3},
+		{"告警组管理", "notify:group", "告警组管理", "notify", "/alert/group", 1},
+		{"告警模板", "notify:template", "告警模板", "notify", "/alert/template", 2},
+		{"告警渠道", "notify:channel", "告警渠道", "notify", "/alert/channel", 3},
 		// 权限管理
 		{"用户管理", "rbac:user", "用户管理", "rbac", "/rbac/user", 1},
 		{"角色管理", "rbac:role", "角色管理", "rbac", "/rbac/role", 2},
@@ -233,8 +236,9 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	// 操作员：任务和告警相关权限
 	if operator, exists := roles["操作员"]; exists {
 		operatorPermissions := []string{
-			"task:read", "task:create", "task:update", "task:execute",
-			"alert:read", "alert:create", "alert:update",
+			"task:scheduler", "task:schedule", "task:log",
+			"etl:stream", "etl:batch",
+			"notify:group", "notify:template", "notify:channel",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range operatorPermissions {
@@ -254,7 +258,11 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	// 观察者：只有查看权限
 	if observer, exists := roles["观察者"]; exists {
 		observerPermissions := []string{
-			"task:read", "alert:read", "user:read", "role:read", "permission:read",
+			"dashboard", "dashboard:base", "dashboard:detail",
+			"task:scheduler", "task:schedule", "task:log",
+			"etl:stream", "etl:batch",
+			"notify:group", "notify:template", "notify:channel",
+			"rbac:user:read", "rbac:role:read", "rbac:permission:read",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range observerPermissions {

@@ -1,0 +1,104 @@
+import { request } from '@/utils/request';
+
+import type {
+  SeatunnelTask,
+  TaskListQuery,
+  TaskListResult,
+  TaskLogListQuery,
+  TaskLogListResult,
+} from './model/seatunnelModel';
+
+const Api = {
+  Tasks: '/tasks',
+  SubmitJob: '/submit-job',
+  StopJob: '/stop-job',
+  SyncJobStatus: '/sync-job-status',
+  TaskLogs: '/task-logs',
+};
+
+export function getTasksApi(params: TaskListQuery) {
+  return request.get<TaskListResult>(
+    {
+      url: Api.Tasks,
+      params,
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function createTaskApi(data: Partial<SeatunnelTask>) {
+  return request.post<SeatunnelTask>(
+    {
+      url: Api.Tasks,
+      data,
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function updateTaskApi(id: number, data: Partial<SeatunnelTask>) {
+  return request.put<SeatunnelTask>(
+    {
+      url: `${Api.Tasks}/${id}`,
+      data,
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function deleteTaskApi(id: number) {
+  return request.delete<{ message: string }>(
+    {
+      url: `${Api.Tasks}/${id}`,
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function submitJobApi(params: { id: number; isStartWithSavePoint?: boolean }) {
+  const query = new URLSearchParams({ id: String(params.id) });
+  if (typeof params.isStartWithSavePoint === 'boolean') {
+    query.set('isStartWithSavePoint', String(params.isStartWithSavePoint));
+  }
+  return request.post<{ message?: string; error?: string }>(
+    {
+      url: `${Api.SubmitJob}?${query.toString()}`,
+      data: {},
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function stopJobApi(params: { id: number; isStopWithSavePoint?: boolean }) {
+  const query = new URLSearchParams({ id: String(params.id) });
+  if (typeof params.isStopWithSavePoint === 'boolean') {
+    query.set('isStopWithSavePoint', String(params.isStopWithSavePoint));
+  }
+  return request.post<{ message?: string; error?: string }>(
+    {
+      url: `${Api.StopJob}?${query.toString()}`,
+      data: {},
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function syncJobStatusApi() {
+  return request.post<{ message: string }>(
+    {
+      url: Api.SyncJobStatus,
+      data: {},
+    },
+    { isTransformResponse: false },
+  );
+}
+
+export function getTaskLogsApi(params: TaskLogListQuery) {
+  return request.get<TaskLogListResult>(
+    {
+      url: Api.TaskLogs,
+      params,
+    },
+    { isTransformResponse: false },
+  );
+}

@@ -575,7 +575,7 @@ func sendResetCode(c *gin.Context) {
 	code := ""
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < 6; i++ {
-		code += string('0' + rand.Intn(10))
+		code += strconv.Itoa(rand.Intn(10))
 	}
 	// 存储验证码，5分钟有效
 	resetCodeStore.Lock()
