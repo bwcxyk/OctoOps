@@ -285,7 +285,24 @@ export class VAxios {
             return;
           }
           if (axios.isAxiosError(e)) {
-            // 在这里重写Axios的错误信息
+            const responseData = e.response?.data as Record<string, unknown> | undefined;
+            const candidateMessages = [
+              responseData?.message,
+              responseData?.msg,
+              responseData?.error,
+              responseData?.detail,
+            ];
+            const backendMessage = candidateMessages.find((msg) => typeof msg === 'string' && msg.trim().length > 0) as
+              | string
+              | undefined;
+
+            // 优先展示后端返回的可读错误信息，避免只看到 axios 默认状态码文案
+            const message =
+              backendMessage ||
+              (e.response?.status === 401 ? '登录已过期，请重新登录' : undefined) ||
+              e.message;
+            reject(new Error(message));
+            return;
           }
           reject(e);
         });

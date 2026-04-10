@@ -134,6 +134,25 @@ const transform: AxiosTransform = {
   responseInterceptorsCatch: (error: any, instance: AxiosInstance) => {
     const { config } = error;
     if (!config || !config.requestOptions.retry) return Promise.reject(error);
+    const method = String(config.method || '').toUpperCase();
+    const status = error?.response?.status;
+    const code = error?.code;
+    const message = String(error?.message || '').toLowerCase();
+
+    // 仅 GET 请求允许重试
+    if (method !== 'GET') return Promise.reject(error);
+
+    // 仅网络错误或 5xx 才重试，401/403/4xx 不重试
+    const isNetworkError =
+      !error?.response &&
+      (code === 'ERR_NETWORK' ||
+        code === 'ECONNABORTED' ||
+        code === 'ETIMEDOUT' ||
+        message.includes('network') ||
+        message.includes('timeout'));
+    const isServerError = typeof status === 'number' && status >= 500 && status < 600;
+
+    if (!isNetworkError && !isServerError) return Promise.reject(error);
 
     config.retryCount = config.retryCount || 0;
 
