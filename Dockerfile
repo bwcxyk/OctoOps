@@ -19,7 +19,7 @@ RUN go mod download
 
 COPY . .
 
-COPY --from=frontend-build /app/public /app/public
+COPY --from=frontend-build /app/web/dist /app/frontend
 
 # 复制 example 文件为 config.yaml
 COPY config.yaml.example /app/config.yaml
@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 COPY --from=backend-build /app/octoops /app/
 COPY --from=backend-build /app/octoops-init /app/
 COPY --from=backend-build /app/config.yaml /app/config.yaml
-COPY --from=backend-build /app/public /app/public
+COPY --from=backend-build /app/frontend /app/frontend
 
 EXPOSE 8080
 
