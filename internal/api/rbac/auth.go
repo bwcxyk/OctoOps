@@ -36,12 +36,13 @@ type LoginResponse struct {
 
 // UserInfo 用户信息
 type UserInfo struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Nickname string `json:"nickname"`
-	Avatar   string `json:"avatar"`
-	Status   int    `json:"status"`
+	ID           uint   `json:"id"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	Nickname     string `json:"nickname"`
+	Avatar       string `json:"avatar"`
+	Status       int    `json:"status"`
+	IsSuperAdmin bool   `json:"is_super_admin"`
 }
 
 // RegisterAuthRoutes 注册认证路由
@@ -130,12 +131,13 @@ func login(c *gin.Context) {
 		"data": LoginResponse{
 			Token:       token,
 			User:        UserInfo{
-				ID:       user.ID,
-				Username: user.Username,
-				Email:    user.Email,
-				Nickname: user.Nickname,
-				Avatar:   user.Avatar,
-				Status:   user.Status,
+				ID:           user.ID,
+				Username:     user.Username,
+				Email:        user.Email,
+				Nickname:     user.Nickname,
+				Avatar:       user.Avatar,
+				Status:       user.Status,
+				IsSuperAdmin: user.IsSuperAdmin,
 			},
 			Roles:       roleNames,
 			Permissions: permissions,
@@ -205,12 +207,13 @@ func register(c *gin.Context) {
 		"code":    200,
 		"message": "注册成功",
 		"data": UserInfo{
-			ID:       user.ID,
-			Username: user.Username,
-			Email:    user.Email,
-			Nickname: user.Nickname,
-			Avatar:   user.Avatar,
-			Status:   user.Status,
+			ID:           user.ID,
+			Username:     user.Username,
+			Email:        user.Email,
+			Nickname:     user.Nickname,
+			Avatar:       user.Avatar,
+			Status:       user.Status,
+			IsSuperAdmin: user.IsSuperAdmin,
 		},
 	})
 }
@@ -244,12 +247,13 @@ func getProfile(c *gin.Context) {
 		"message": "获取成功",
 		"data": gin.H{
 			"user": UserInfo{
-				ID:       user.ID,
-				Username: user.Username,
-				Email:    user.Email,
-				Nickname: user.Nickname,
-				Avatar:   user.Avatar,
-				Status:   user.Status,
+				ID:           user.ID,
+				Username:     user.Username,
+				Email:        user.Email,
+				Nickname:     user.Nickname,
+				Avatar:       user.Avatar,
+				Status:       user.Status,
+				IsSuperAdmin: user.IsSuperAdmin,
 			},
 			"roles":       roleNames,
 			"permissions": permissions,

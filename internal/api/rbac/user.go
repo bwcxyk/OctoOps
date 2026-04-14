@@ -27,11 +27,11 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest 更新用户请求
 type UpdateUserRequest struct {
-	Email    string `json:"email"`
+	Email   string `json:"email"`
 	Nickname string `json:"nickname"`
-	Avatar   string `json:"avatar"`
-	Status   *int   `json:"status"`
-	RoleIDs  []uint `json:"role_ids"`
+	Avatar  string `json:"avatar"`
+	Status  *int   `json:"status"`
+	RoleIDs []uint `json:"role_ids"`
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -95,7 +95,7 @@ func getUsers(c *gin.Context) {
 	email := c.Query("email")
 	status := c.Query("status")
 
-	query := db.DB.Model(&model.User{}).Preload("Roles")
+	query := db.DB.Model(&model.User{}).Preload("Roles").Where("is_super_admin = ?", false)
 
 	// 添加查询条件
 	if username != "" {

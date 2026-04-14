@@ -389,6 +389,15 @@ func getUserMenus(c *gin.Context) {
 	user, _ := c.Get("user")
 	userModel, _ := user.(*model.User)
 
+	// 超级管理员返回所有菜单
+	if userModel.IsSuperAdmin {
+		var menus []model.Permission
+		db.DB.Where("type = ? AND status = 1", "menu").Order("order_num ASC, id ASC").Find(&menus)
+		menuTree := buildMenuTreeForSuperAdmin(menus, 0)
+		c.JSON(200, gin.H{"code": 200, "data": menuTree})
+		return
+	}
+
 	// 查询用户所有权限
 	var roles []model.Role
 	db.DB.Model(userModel).Preload("Permissions").Association("Roles").Find(&roles)
@@ -405,6 +414,24 @@ func getUserMenus(c *gin.Context) {
 
 	menuTree := buildMenuTree(menus, 0, permMap)
 	c.JSON(200, gin.H{"code": 200, "data": menuTree})
+}
+
+// buildMenuTreeForSuperAdmin 超级管理员菜单树（显示所有菜单）
+func buildMenuTreeForSuperAdmin(menus []model.Permission, parentID uint) []MenuNode {
+	var tree []MenuNode
+	for _, m := range menus {
+		if m.ParentID == parentID {
+			node := MenuNode{
+				Name: m.Name,
+				Code: m.Code,
+				Path: m.Path,
+				Children: buildMenuTreeForSuperAdmin(menus, m.ID),
+				Permission: m.Code,
+			}
+			tree = append(tree, node)
+		}
+	}
+	return tree
 }
 
 // buildMenuTree 递归组装菜单树，只保留有权限的菜单
