@@ -110,9 +110,9 @@ func SyncAliyunSGConfig(c *gin.Context) {
 
 // 路由注册函数
 func RegisterAliyunRoutes(r *gin.RouterGroup) {
-	r.GET("/aliyun-sg-configs", ListAliyunSGConfigs)
-	r.POST("/aliyun-sg-configs", CreateAliyunSGConfig)
-	r.PUT("/aliyun-sg-configs/:id", UpdateAliyunSGConfig)
-	r.DELETE("/aliyun-sg-configs/:id", DeleteAliyunSGConfig)
-	r.POST("/aliyun-sg-configs/:id/sync", SyncAliyunSGConfig)
+	r.GET("/aliyun/ecs-sg", ListAliyunSGConfigs)
+	r.POST("/aliyun/ecs-sg", CreateAliyunSGConfig)
+	r.PUT("/aliyun/ecs-sg/:id", UpdateAliyunSGConfig)
+	r.DELETE("/aliyun/ecs-sg/:id", DeleteAliyunSGConfig)
+	r.POST("/aliyun/ecs-sg/:id/sync", SyncAliyunSGConfig)
 }

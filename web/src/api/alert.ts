@@ -3,9 +3,9 @@ import { request } from '@/utils/request';
 import type { AlertChannel, AlertGroup, AlertGroupMember, AlertTemplate } from './model/alertModel';
 
 const Api = {
-  Channels: '/channels',
-  AlertGroups: '/alert-groups',
-  AlertTemplates: '/alert-templates',
+  Channels: '/alert/channel',
+  AlertGroups: '/alert/group',
+  AlertTemplates: '/alert/template',
 };
 
 export function getAlertChannelsApi() {

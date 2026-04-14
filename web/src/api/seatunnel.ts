@@ -9,17 +9,24 @@ import type {
 } from './model/seatunnelModel';
 
 const Api = {
-  Tasks: '/tasks',
+  StreamTasks: '/seatunnel/stream',
+  BatchTasks: '/seatunnel/batch',
   SubmitJob: '/submit-job',
   StopJob: '/stop-job',
   SyncJobStatus: '/sync-job-status',
-  TaskLogs: '/task-logs',
+  TaskLogs: '/task/log',
 };
+
+function resolveTasksApiByType(taskType?: string) {
+  if (taskType === 'stream') return Api.StreamTasks;
+  if (taskType === 'batch') return Api.BatchTasks;
+  return Api.StreamTasks;
+}
 
 export function getTasksApi(params: TaskListQuery) {
   return request.get<TaskListResult>(
     {
-      url: Api.Tasks,
+      url: resolveTasksApiByType(params.task_type),
       params,
     },
     { isTransformResponse: false },
@@ -29,27 +36,27 @@ export function getTasksApi(params: TaskListQuery) {
 export function createTaskApi(data: Partial<SeatunnelTask>) {
   return request.post<SeatunnelTask>(
     {
-      url: Api.Tasks,
+      url: resolveTasksApiByType(data.task_type),
       data,
     },
     { isTransformResponse: false },
   );
 }
 
-export function updateTaskApi(id: number, data: Partial<SeatunnelTask>) {
+export function updateTaskApi(id: number, data: Partial<SeatunnelTask>, taskType?: 'stream' | 'batch') {
   return request.put<SeatunnelTask>(
     {
-      url: `${Api.Tasks}/${id}`,
+      url: `${resolveTasksApiByType(taskType)}/${id}`,
       data,
     },
     { isTransformResponse: false },
   );
 }
 
-export function deleteTaskApi(id: number) {
+export function deleteTaskApi(id: number, taskType?: 'stream' | 'batch') {
   return request.delete<{ message: string }>(
     {
-      url: `${Api.Tasks}/${id}`,
+      url: `${resolveTasksApiByType(taskType)}/${id}`,
     },
     { isTransformResponse: false },
   );

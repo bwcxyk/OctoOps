@@ -404,7 +404,7 @@ function showDetail(row: SeatunnelTask) {
 
 async function onDelete(id: number) {
   try {
-    await deleteTaskApi(id);
+    await deleteTaskApi(id, 'stream');
     MessagePlugin.success('删除成功');
     await fetchTasks();
   } catch (error) {
@@ -436,7 +436,7 @@ async function onFormSubmit(ctx: SubmitContext) {
     };
 
     if (editForm.id) {
-      await updateTaskApi(editForm.id, payload);
+      await updateTaskApi(editForm.id, payload, 'stream');
       MessagePlugin.success('更新成功');
     } else {
       await createTaskApi(payload);

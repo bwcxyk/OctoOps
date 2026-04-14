@@ -124,11 +124,11 @@ func TestChannel(c *gin.Context) {
 
 // RegisterChannelRoutes 路由注册函数
 func RegisterAlertChannelRoutes(r *gin.RouterGroup) {
-	r.GET("/channels", ListChannels)
-	r.POST("/channels", CreateChannel)
-	r.PUT("/channels/:id", UpdateChannel)
-	r.DELETE("/channels/:id", DeleteChannel)
-	r.POST("/channels/:id/test", TestChannel)
+	r.GET("/alert/channel", ListChannels)
+	r.POST("/alert/channel", CreateChannel)
+	r.PUT("/alert/channel/:id", UpdateChannel)
+	r.DELETE("/alert/channel/:id", DeleteChannel)
+	r.POST("/alert/channel/:id/test", TestChannel)
 }
 
 // ListAlertGroups 告警组列表
@@ -225,17 +225,17 @@ func parseUint(s string) (uint, error) {
 
 // RegisterAlertGroupRoutes 路由注册
 func RegisterAlertGroupRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-groups", ListAlertGroups)
-	r.POST("/alert-groups", CreateAlertGroup)
-	r.PUT("/alert-groups/:id", UpdateAlertGroup)
-	r.DELETE("/alert-groups/:id", DeleteAlertGroup)
+	r.GET("/alert/group", ListAlertGroups)
+	r.POST("/alert/group", CreateAlertGroup)
+	r.PUT("/alert/group/:id", UpdateAlertGroup)
+	r.DELETE("/alert/group/:id", DeleteAlertGroup)
 }
 
 // RegisterAlertGroupMemberRoutes 路由注册扩展
 func RegisterAlertGroupMemberRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-groups/:id/members", ListAlertGroupMembers)
-	r.POST("/alert-groups/:id/members", AddAlertGroupMember)
-	r.DELETE("/alert-groups/:id/members/:member_id", DeleteAlertGroupMember)
+	r.GET("/alert/group/:id/members", ListAlertGroupMembers)
+	r.POST("/alert/group/:id/members", AddAlertGroupMember)
+	r.DELETE("/alert/group/:id/members/:member_id", DeleteAlertGroupMember)
 }
 
 // ListAlertTemplates 告警模板列表
@@ -286,8 +286,8 @@ func DeleteAlertTemplate(c *gin.Context) {
 
 // RegisterAlertTemplateRoutes 路由注册
 func RegisterAlertTemplateRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-templates", ListAlertTemplates)
-	r.POST("/alert-templates", CreateAlertTemplate)
-	r.PUT("/alert-templates/:id", UpdateAlertTemplate)
-	r.DELETE("/alert-templates/:id", DeleteAlertTemplate)
+	r.GET("/alert/template", ListAlertTemplates)
+	r.POST("/alert/template", CreateAlertTemplate)
+	r.PUT("/alert/template/:id", UpdateAlertTemplate)
+	r.DELETE("/alert/template/:id", DeleteAlertTemplate)
 }

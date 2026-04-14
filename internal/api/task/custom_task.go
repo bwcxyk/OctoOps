@@ -101,8 +101,8 @@ func DeleteCustomTask(c *gin.Context) {
 }
 
 func RegisterCustomTaskRoutes(r *gin.RouterGroup) {
-	r.GET("/custom-tasks", ListCustomTasks)
-	r.POST("/custom-tasks", CreateCustomTask)
-	r.PUT("/custom-tasks/:id", UpdateCustomTask)
-	r.DELETE("/custom-tasks/:id", DeleteCustomTask)
+	r.GET("/task/custom", ListCustomTasks)
+	r.POST("/task/custom", CreateCustomTask)
+	r.PUT("/task/custom/:id", UpdateCustomTask)
+	r.DELETE("/task/custom/:id", DeleteCustomTask)
 }

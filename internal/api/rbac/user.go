@@ -82,9 +82,9 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 		users.POST("/change-password", changePassword)
 	}
 	// 忘记密码接口无需登录
-	r.POST("/users/forgot-password", forgotPassword)
+	users.POST("/forgot-password", forgotPassword)
 	// 发送验证码接口
-	r.POST("/users/send-reset-code", sendResetCode)
+	users.POST("/send-reset-code", sendResetCode)
 }
 
 // getUsers 获取用户列表
