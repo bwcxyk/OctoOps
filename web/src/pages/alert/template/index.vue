@@ -72,13 +72,23 @@
           </t-select>
         </t-form-item>
         <t-form-item label="内容" name="content">
-          <t-textarea v-model="editForm.content" :autosize="{ minRows: 12, maxRows: 16 }" />
+          <div class="preview-container">
+            <t-textarea v-model="editForm.content" :autosize="{ minRows: 12, maxRows: 16 }" />
+            <div class="preview-action">
+              <t-button variant="outline" @click="openPreviewDialog">预览</t-button>
+            </div>
+          </div>
         </t-form-item>
       </t-form>
     </t-dialog>
 
+    <t-dialog v-model:visible="previewDialogVisible" header="模板预览" width="860px" :footer="false">
+      <div v-if="!previewContent" class="preview-render">（暂无内容）</div>
+      <div v-else class="preview-render preview-rich" v-html="previewRenderedContent"></div>
+    </t-dialog>
+
     <t-dialog v-model:visible="detailDialogVisible" header="模板详情" width="640px" :footer="false">
-      <t-descriptions :column="1" bordered>
+      <t-descriptions class="detail-descriptions" :column="1" bordered>
         <t-descriptions-item label="模板名称">{{ detailForm.name }}</t-descriptions-item>
         <t-descriptions-item label="类型">{{ typeLabel(detailForm.type || '') }}</t-descriptions-item>
         <t-descriptions-item label="内容">
@@ -90,6 +100,7 @@
 </template>
 
 <script setup lang="ts">
+import MarkdownIt from 'markdown-it';
 import type { FormRule, PrimaryTableCol, SubmitContext, TableRowData } from 'tdesign-vue-next';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -125,6 +136,7 @@ const pageSize = ref(10);
 
 const editDialogVisible = ref(false);
 const detailDialogVisible = ref(false);
+const previewDialogVisible = ref(false);
 const formRef = ref();
 
 const editForm = reactive<Partial<AlertTemplate>>({
@@ -135,6 +147,26 @@ const editForm = reactive<Partial<AlertTemplate>>({
 });
 
 const detailForm = ref<Partial<AlertTemplate>>({});
+
+const previewContent = computed(() => editForm.content || '');
+const previewRenderMode = computed(() => (editForm.type === 'email' ? 'html' : 'markdown'));
+const markdown = new MarkdownIt({
+  html: false,
+  breaks: true,
+  linkify: true,
+});
+
+const sanitizeHtml = (content: string) =>
+  content
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+=(['"]).*?\1/gi, '')
+    .replace(/\son\w+=\S+/gi, '');
+
+const previewRenderedContent = computed(() => {
+  if (!previewContent.value) return '';
+  if (previewRenderMode.value === 'html') return sanitizeHtml(previewContent.value);
+  return markdown.render(previewContent.value);
+});
 
 const pagedData = computed(() => {
   const start = (page.value - 1) * pageSize.value;
@@ -173,6 +205,10 @@ const openEditDialog = (row?: AlertTemplate) => {
 const showDetail = (row: AlertTemplate) => {
   detailForm.value = { ...row };
   detailDialogVisible.value = true;
+};
+
+const openPreviewDialog = () => {
+  previewDialogVisible.value = true;
 };
 
 const removeTemplate = async (id: number) => {
@@ -244,5 +280,119 @@ onMounted(fetchTemplates);
   display: flex;
   justify-content: flex-end;
   margin-top: var(--td-comp-margin-xxl);
+}
+
+.detail-descriptions {
+  :deep(.t-descriptions__label) {
+    width: 110px;
+    white-space: nowrap;
+  }
+
+  :deep(.t-textarea) {
+    width: 100%;
+  }
+}
+
+.preview-container {
+  width: 100%;
+}
+
+.preview-action {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.preview-render {
+  min-height: 260px;
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-medium);
+  background: var(--td-bg-color-container);
+  padding: 14px 16px;
+  color: var(--td-text-color-primary);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.preview-rich {
+  white-space: normal;
+
+  :deep(p) {
+    margin: 0 0 10px;
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin: 0 0 12px;
+    line-height: 1.5;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0 0 10px 20px;
+    padding-left: 20px;
+  }
+
+  :deep(ul) {
+    list-style: disc;
+    list-style-position: outside;
+  }
+
+  :deep(ol) {
+    list-style: decimal;
+    list-style-position: outside;
+  }
+
+  :deep(li) {
+    display: list-item;
+    list-style: inherit;
+    margin: 4px 0;
+  }
+
+  :deep(ul > li) {
+    list-style-type: disc;
+  }
+
+  :deep(ol > li) {
+    list-style-type: decimal;
+  }
+
+  :deep(code) {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--td-bg-color-page);
+    font-family: Consolas, 'Courier New', monospace;
+  }
+
+  :deep(pre) {
+    overflow: auto;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--td-bg-color-page);
+    font-family: Consolas, 'Courier New', monospace;
+    line-height: 1.6;
+  }
+
+  :deep(blockquote) {
+    margin: 0 0 10px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--td-brand-color);
+    color: var(--td-text-color-secondary);
+    background: var(--td-bg-color-page);
+  }
+
+  :deep(hr) {
+    border: 0;
+    border-top: 1px solid var(--td-component-border);
+    margin: 12px 0;
+  }
 }
 </style>
