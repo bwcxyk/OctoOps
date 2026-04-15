@@ -40,7 +40,7 @@
     <t-dialog
       v-model:visible="dialogVisible"
       :header="dialogTitle"
-      width="620px"
+      width="920px"
       :confirm-btn="{ content: '保存', theme: 'primary', loading: submitLoading }"
       @confirm="onSubmit"
     >
@@ -52,17 +52,37 @@
           <t-input v-model="editForm.description" placeholder="请输入描述" />
         </t-form-item>
         <t-form-item name="permission_ids" label="权限">
-          <div class="permission-tree-wrapper">
-            <t-tree
-              :data="permissionTree"
-              :keys="{ label: 'name', value: 'id', children: 'children' }"
-              checkable
-              hover
-              expand-on-click-node
-              value-mode="all"
-              :value="editForm.permission_ids"
-              @change="onPermissionTreeChange"
-            />
+          <div class="permission-sections">
+            <div class="permission-section">
+              <div class="permission-section-title">菜单权限</div>
+              <div class="permission-tree-wrapper">
+                <t-tree
+                  :data="menuPermissionTree"
+                  :keys="{ label: 'name', value: 'id', children: 'children' }"
+                  checkable
+                  hover
+                  expand-on-click-node
+                  value-mode="all"
+                  :value="menuPermissionIds"
+                  @change="onMenuPermissionChange"
+                />
+              </div>
+            </div>
+            <div class="permission-section">
+              <div class="permission-section-title">接口权限</div>
+              <div class="permission-tree-wrapper">
+                <t-tree
+                  :data="apiPermissionTree"
+                  :keys="{ label: 'name', value: 'id', children: 'children' }"
+                  checkable
+                  hover
+                  expand-on-click-node
+                  value-mode="all"
+                  :value="apiPermissionIds"
+                  @change="onApiPermissionChange"
+                />
+              </div>
+            </div>
           </div>
         </t-form-item>
       </t-form>
@@ -88,6 +108,11 @@ interface RoleEditForm {
   permission_ids: number[];
 }
 
+type PermissionTreeDisplayNode = Omit<PermissionTreeNode, 'children'> & {
+  children: PermissionTreeDisplayNode[];
+  disabled?: boolean;
+};
+
 const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '序号', colKey: 'index', width: 80 },
   { title: '角色名', colKey: 'name', minWidth: 180 },
@@ -103,6 +128,11 @@ const rules: Record<string, FormRule[]> = {
 
 const roles = ref<RoleItem[]>([]);
 const permissionTree = ref<PermissionTreeNode[]>([]);
+const menuPermissionTree = ref<PermissionTreeDisplayNode[]>([]);
+const apiPermissionTree = ref<PermissionTreeDisplayNode[]>([]);
+const permissionTypeMap = ref<Record<number, string>>({});
+const menuPermissionIds = ref<number[]>([]);
+const apiPermissionIds = ref<number[]>([]);
 const loading = ref(false);
 const submitLoading = ref(false);
 const total = ref(0);
@@ -124,6 +154,8 @@ function resetEditForm() {
   editForm.name = '';
   editForm.description = '';
   editForm.permission_ids = [];
+  menuPermissionIds.value = [];
+  apiPermissionIds.value = [];
 }
 
 async function fetchRoles() {
@@ -144,14 +176,105 @@ async function fetchPermissions() {
   try {
     const res = await getPermissionTreeApi();
     permissionTree.value = res || [];
+    permissionTypeMap.value = buildPermissionTypeMap(permissionTree.value);
+    menuPermissionTree.value = buildMenuPermissionTree(permissionTree.value);
+    apiPermissionTree.value = buildApiPermissionTree(permissionTree.value);
   } catch (error) {
     console.error(error);
     MessagePlugin.error('获取权限树失败');
   }
 }
 
-function onPermissionTreeChange(value: TreeNodeValue[]) {
-  editForm.permission_ids = value.map((item) => Number(item));
+function syncPermissionIds() {
+  editForm.permission_ids = Array.from(new Set([...menuPermissionIds.value, ...apiPermissionIds.value]));
+}
+
+function onMenuPermissionChange(value: TreeNodeValue[]) {
+  menuPermissionIds.value = value
+    .map((item) => Number(item))
+    .filter((id) => permissionTypeMap.value[id] === 'menu');
+  syncPermissionIds();
+}
+
+function onApiPermissionChange(value: TreeNodeValue[]) {
+  apiPermissionIds.value = value
+    .map((item) => Number(item))
+    .filter((id) => permissionTypeMap.value[id] === 'api');
+  syncPermissionIds();
+}
+
+function buildPermissionTypeMap(tree: PermissionTreeNode[]) {
+  const map: Record<number, string> = {};
+  const walk = (nodes: PermissionTreeNode[]) => {
+    nodes.forEach((node) => {
+      map[node.id] = node.type;
+      if (node.children?.length) {
+        walk(node.children);
+      }
+    });
+  };
+  walk(tree);
+  return map;
+}
+
+function buildMenuPermissionTree(nodes: PermissionTreeNode[]): PermissionTreeDisplayNode[] {
+  const result: PermissionTreeDisplayNode[] = [];
+  nodes.forEach((node) => {
+    if (node.type !== 'menu') {
+      return;
+    }
+    result.push({
+      ...node,
+      children: buildMenuPermissionTree(node.children || []),
+    });
+  });
+  return result;
+}
+
+function buildApiPermissionTree(nodes: PermissionTreeNode[]): PermissionTreeDisplayNode[] {
+  const walk = (list: PermissionTreeNode[]): PermissionTreeDisplayNode[] => {
+    const result: PermissionTreeDisplayNode[] = [];
+    list.forEach((node) => {
+      if (node.type === 'api') {
+        result.push({
+          ...node,
+          children: [],
+          name: `${node.name} [${node.method || '-'} ${node.path || '-'}]`,
+        });
+        return;
+      }
+
+      const apiChildren = walk(node.children || []);
+      if (node.type === 'menu' && apiChildren.length > 0) {
+        result.push({
+          ...node,
+          children: apiChildren,
+        });
+      }
+    });
+    return result;
+  };
+
+  const result = walk(nodes);
+  return result;
+}
+
+function splitPermissionIds(allIds: number[]) {
+  const menuIds: number[] = [];
+  const apiIds: number[] = [];
+  allIds.forEach((id) => {
+    const type = permissionTypeMap.value[id];
+    if (type === 'menu') {
+      menuIds.push(id);
+      return;
+    }
+    if (type === 'api') {
+      apiIds.push(id);
+    }
+  });
+  menuPermissionIds.value = menuIds;
+  apiPermissionIds.value = apiIds;
+  syncPermissionIds();
 }
 
 function onPageSizeChange(size: number) {
@@ -171,7 +294,7 @@ function onEdit(row: RoleItem) {
   editForm.id = row.id;
   editForm.name = row.name;
   editForm.description = row.description || '';
-  editForm.permission_ids = (row.permissions || []).map((item) => item.id);
+  splitPermissionIds((row.permissions || []).map((item) => item.id));
   dialogVisible.value = true;
 }
 
@@ -272,6 +395,24 @@ onMounted(async () => {
 
   :deep(.t-tree__label.t-is-checked) {
     background-color: transparent;
+  }
+}
+
+.permission-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.permission-section-title {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+@media (max-width: 900px) {
+  .permission-sections {
+    grid-template-columns: 1fr;
   }
 }
 </style>

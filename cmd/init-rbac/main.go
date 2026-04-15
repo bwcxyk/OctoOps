@@ -313,11 +313,13 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	if operator, exists := roles["操作员"]; exists {
 		operatorPermissions := []string{
 			// Seatunnel API
-			"etl:stream:read", "etl:stream:create", "etl:stream:update",
-			"etl:batch:read", "etl:batch:create", "etl:batch:update",
+			"etl:stream", "etl:stream:read", "etl:stream:create", "etl:stream:update",
+			"etl:batch", "etl:batch:read", "etl:batch:create", "etl:batch:update",
+			"notify:group:read",
 			// 任务中心 API
-			"task:scheduler:status",
-			"task:custom:read", "task:log:read",
+			"task:scheduler", "task:scheduler:status",
+			"task:custom", "task:custom:read",
+			"task:log", "task:log:read",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range operatorPermissions {
@@ -338,9 +340,11 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	if observer, exists := roles["观察者"]; exists {
 		observerPermissions := []string{
 			// Seatunnel
-			"etl:stream:read", "etl:batch:read",
+			"etl:stream", "etl:stream:read",
+			"etl:batch", "etl:batch:read",
+			"notify:group:read",
 			// 任务管理
-			"task:scheduler:status", "task:custom:read", "task:log:read",
+			"task:log", "task:log:read",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range observerPermissions {

@@ -407,9 +407,9 @@ async function onDelete(id: number) {
     await deleteTaskApi(id, 'stream');
     MessagePlugin.success('删除成功');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('删除失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '删除失败');
   }
 }
 
@@ -508,9 +508,9 @@ async function onSyncStatus() {
     await syncJobStatusApi();
     MessagePlugin.success('同步作业状态已触发');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('同步失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '同步失败');
   } finally {
     syncing.value = false;
   }

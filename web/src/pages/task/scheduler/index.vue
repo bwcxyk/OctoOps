@@ -132,9 +132,9 @@ async function doAction(action: () => Promise<unknown>, successMessage: string) 
     await action();
     MessagePlugin.success(successMessage);
     await fetchStatus();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('操作失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '操作失败');
   }
 }
 

@@ -87,9 +87,9 @@ async function onToggleStatus(row: CustomTaskItem, status: 0 | 1) {
     await updateCustomTaskApi(row.id, { status });
     MessagePlugin.success(status === 1 ? '已启用' : '已禁用');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('操作失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '操作失败');
     await fetchTasks();
   }
 }
