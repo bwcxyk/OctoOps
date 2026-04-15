@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"octoops/internal/db"
+	"octoops/internal/middleware"
 	taskModel "octoops/internal/model/task"
 
 	"github.com/gin-gonic/gin"
@@ -48,5 +49,5 @@ func ListTaskLogs(c *gin.Context) {
 }
 
 func RegisterTaskLogRoutes(r *gin.RouterGroup) {
-	r.GET("/task/log", ListTaskLogs)
+	r.GET("/task/log", middleware.AuthMiddleware(), middleware.RequirePermission("task:log:read"), ListTaskLogs)
 }

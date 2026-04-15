@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"octoops/internal/config"
 	"octoops/internal/db"
+	"octoops/internal/middleware"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	seatunnel "octoops/internal/service/seatunnel"
 	"strings"
@@ -34,9 +35,23 @@ func waitForTaskStatus(taskID uint, attempts int, interval time.Duration, should
 	return jobStatus
 }
 
+func requireTaskActionPermission(c *gin.Context, taskType, action string) bool {
+	user := middleware.GetCurrentUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未认证"})
+		return false
+	}
+	permissionCode := fmt.Sprintf("etl:%s:%s", taskType, action)
+	if !middleware.HasPermission(user, permissionCode) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "权限不足"})
+		return false
+	}
+	return true
+}
+
 // 提交作业
 func SubmitJob(c *gin.Context) {
-	id := c.Query("id")
+	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
 		return
@@ -51,6 +66,9 @@ func SubmitJob(c *gin.Context) {
 	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, taskID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
+	}
+	if !requireTaskActionPermission(c, task.TaskType, "submit") {
 		return
 	}
 	if task.TaskType == "stream" && task.JobStatus == "RUNNING" {
@@ -97,7 +115,7 @@ func SubmitJob(c *gin.Context) {
 
 // 停止作业
 func StopJob(c *gin.Context) {
-	id := c.Query("id")
+	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
 		return
@@ -105,6 +123,9 @@ func StopJob(c *gin.Context) {
 	var task seatunnelModel.EtlTask
 	if err := db.DB.First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
+	}
+	if !requireTaskActionPermission(c, task.TaskType, "stop") {
 		return
 	}
 	if task.JobID == nil || *task.JobID == "" {
@@ -147,19 +168,19 @@ func StopJob(c *gin.Context) {
 
 // 手动触发同步所有任务 job_status
 func SyncJobStatus(c *gin.Context) {
-	log.Printf("[ETL] 触发同步作业状态 /api/sync-job-status")
+	log.Printf("[ETL] 触发同步作业状态 /api/seatunnel/tasks/sync-status")
 	seatunnel.SyncAllJobStatus()
 	c.JSON(http.StatusOK, gin.H{"message": "同步作业状态已触发"})
 }
 
 func RegisterStreamTaskRoutes(r *gin.RouterGroup) {
-	r.GET("/seatunnel/stream", ListTasks)
-	r.POST("/seatunnel/stream", CreateTask)
-	r.PUT("/seatunnel/stream/:id", UpdateTaskWithScheduler)
-	r.DELETE("/seatunnel/stream/:id", DeleteTask)
+	r.GET("/seatunnel/stream", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:read"), ListStreamTasks)
+	r.POST("/seatunnel/stream", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:create"), CreateStreamTask)
+	r.PUT("/seatunnel/stream/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:update"), UpdateStreamTaskWithScheduler)
+	r.DELETE("/seatunnel/stream/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:delete"), DeleteStreamTask)
 
 	// 作业控制（stream/batch 手动触发都使用这组接口）
-	r.POST("/submit-job", SubmitJob)
-	r.POST("/stop-job", StopJob)
-	r.POST("/sync-job-status", SyncJobStatus)
+	r.POST("/seatunnel/tasks/:id/start", middleware.AuthMiddleware(), middleware.RequireAnyPermission("etl:stream:submit", "etl:batch:submit"), SubmitJob)
+	r.POST("/seatunnel/tasks/:id/stop", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:stop"), StopJob)
+	r.POST("/seatunnel/tasks/sync-status", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:sync_status"), SyncJobStatus)
 }

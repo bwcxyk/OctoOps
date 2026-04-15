@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"octoops/internal/db"
+	"octoops/internal/middleware"
 	aliyunModel "octoops/internal/model/aliyun"
 	aliyunService "octoops/internal/service/aliyun"
 	"octoops/internal/utils"
@@ -110,9 +111,9 @@ func SyncAliyunSGConfig(c *gin.Context) {
 
 // 路由注册函数
 func RegisterAliyunRoutes(r *gin.RouterGroup) {
-	r.GET("/aliyun/ecs-sg", ListAliyunSGConfigs)
-	r.POST("/aliyun/ecs-sg", CreateAliyunSGConfig)
-	r.PUT("/aliyun/ecs-sg/:id", UpdateAliyunSGConfig)
-	r.DELETE("/aliyun/ecs-sg/:id", DeleteAliyunSGConfig)
-	r.POST("/aliyun/ecs-sg/:id/sync", SyncAliyunSGConfig)
+	r.GET("/aliyun/ecs-sg", middleware.AuthMiddleware(), middleware.RequirePermission("aliyun:ecs_sg:read"), ListAliyunSGConfigs)
+	r.POST("/aliyun/ecs-sg", middleware.AuthMiddleware(), middleware.RequirePermission("aliyun:ecs_sg:create"), CreateAliyunSGConfig)
+	r.PUT("/aliyun/ecs-sg/:id", middleware.AuthMiddleware(), middleware.RequirePermission("aliyun:ecs_sg:update"), UpdateAliyunSGConfig)
+	r.DELETE("/aliyun/ecs-sg/:id", middleware.AuthMiddleware(), middleware.RequirePermission("aliyun:ecs_sg:delete"), DeleteAliyunSGConfig)
+	r.POST("/aliyun/ecs-sg/:id/sync", middleware.AuthMiddleware(), middleware.RequirePermission("aliyun:ecs_sg:sync"), SyncAliyunSGConfig)
 }

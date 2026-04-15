@@ -11,9 +11,9 @@ import type {
 const Api = {
   StreamTasks: '/seatunnel/stream',
   BatchTasks: '/seatunnel/batch',
-  SubmitJob: '/submit-job',
-  StopJob: '/stop-job',
-  SyncJobStatus: '/sync-job-status',
+  StartTask: '/seatunnel/tasks',
+  StopTask: '/seatunnel/tasks',
+  SyncJobStatus: '/seatunnel/tasks/sync-status',
   TaskLogs: '/task/log',
 };
 
@@ -63,13 +63,14 @@ export function deleteTaskApi(id: number, taskType?: 'stream' | 'batch') {
 }
 
 export function submitJobApi(params: { id: number; isStartWithSavePoint?: boolean }) {
-  const query = new URLSearchParams({ id: String(params.id) });
+  const query = new URLSearchParams();
   if (typeof params.isStartWithSavePoint === 'boolean') {
     query.set('isStartWithSavePoint', String(params.isStartWithSavePoint));
   }
+  const queryString = query.toString();
   return request.post<{ message?: string; error?: string }>(
     {
-      url: `${Api.SubmitJob}?${query.toString()}`,
+      url: `${Api.StartTask}/${params.id}/start${queryString ? `?${queryString}` : ''}`,
       data: {},
     },
     { isTransformResponse: false },
@@ -77,13 +78,14 @@ export function submitJobApi(params: { id: number; isStartWithSavePoint?: boolea
 }
 
 export function stopJobApi(params: { id: number; isStopWithSavePoint?: boolean }) {
-  const query = new URLSearchParams({ id: String(params.id) });
+  const query = new URLSearchParams();
   if (typeof params.isStopWithSavePoint === 'boolean') {
     query.set('isStopWithSavePoint', String(params.isStopWithSavePoint));
   }
+  const queryString = query.toString();
   return request.post<{ message?: string; error?: string }>(
     {
-      url: `${Api.StopJob}?${query.toString()}`,
+      url: `${Api.StopTask}/${params.id}/stop${queryString ? `?${queryString}` : ''}`,
       data: {},
     },
     { isTransformResponse: false },
