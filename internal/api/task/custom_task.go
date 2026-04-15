@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"octoops/internal/db"
+	"octoops/internal/middleware"
 	taskModel "octoops/internal/model/task"
 	"octoops/internal/scheduler"
 	"strconv"
@@ -101,8 +102,8 @@ func DeleteCustomTask(c *gin.Context) {
 }
 
 func RegisterCustomTaskRoutes(r *gin.RouterGroup) {
-	r.GET("/custom-tasks", ListCustomTasks)
-	r.POST("/custom-tasks", CreateCustomTask)
-	r.PUT("/custom-tasks/:id", UpdateCustomTask)
-	r.DELETE("/custom-tasks/:id", DeleteCustomTask)
+	r.GET("/task/custom", middleware.AuthMiddleware(), middleware.RequirePermission("task:custom:read"), ListCustomTasks)
+	r.POST("/task/custom", middleware.AuthMiddleware(), middleware.RequirePermission("task:custom:create"), CreateCustomTask)
+	r.PUT("/task/custom/:id", middleware.AuthMiddleware(), middleware.RequirePermission("task:custom:update"), UpdateCustomTask)
+	r.DELETE("/task/custom/:id", middleware.AuthMiddleware(), middleware.RequirePermission("task:custom:delete"), DeleteCustomTask)
 }

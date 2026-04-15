@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"octoops/internal/db"
+	"octoops/internal/middleware"
 	alertModel "octoops/internal/model/alert"
 	alertService "octoops/internal/service/alert"
 	"strings"
@@ -124,11 +125,11 @@ func TestChannel(c *gin.Context) {
 
 // RegisterChannelRoutes 路由注册函数
 func RegisterAlertChannelRoutes(r *gin.RouterGroup) {
-	r.GET("/channels", ListChannels)
-	r.POST("/channels", CreateChannel)
-	r.PUT("/channels/:id", UpdateChannel)
-	r.DELETE("/channels/:id", DeleteChannel)
-	r.POST("/channels/:id/test", TestChannel)
+	r.GET("/alert/channel", middleware.AuthMiddleware(), middleware.RequirePermission("notify:channel:read"), ListChannels)
+	r.POST("/alert/channel", middleware.AuthMiddleware(), middleware.RequirePermission("notify:channel:create"), CreateChannel)
+	r.PUT("/alert/channel/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:channel:update"), UpdateChannel)
+	r.DELETE("/alert/channel/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:channel:delete"), DeleteChannel)
+	r.POST("/alert/channel/:id/test", middleware.AuthMiddleware(), middleware.RequirePermission("notify:channel:test"), TestChannel)
 }
 
 // ListAlertGroups 告警组列表
@@ -225,17 +226,17 @@ func parseUint(s string) (uint, error) {
 
 // RegisterAlertGroupRoutes 路由注册
 func RegisterAlertGroupRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-groups", ListAlertGroups)
-	r.POST("/alert-groups", CreateAlertGroup)
-	r.PUT("/alert-groups/:id", UpdateAlertGroup)
-	r.DELETE("/alert-groups/:id", DeleteAlertGroup)
+	r.GET("/alert/group", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:read"), ListAlertGroups)
+	r.POST("/alert/group", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:create"), CreateAlertGroup)
+	r.PUT("/alert/group/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:update"), UpdateAlertGroup)
+	r.DELETE("/alert/group/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:delete"), DeleteAlertGroup)
 }
 
 // RegisterAlertGroupMemberRoutes 路由注册扩展
 func RegisterAlertGroupMemberRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-groups/:id/members", ListAlertGroupMembers)
-	r.POST("/alert-groups/:id/members", AddAlertGroupMember)
-	r.DELETE("/alert-groups/:id/members/:member_id", DeleteAlertGroupMember)
+	r.GET("/alert/group/:id/members", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:member:read"), ListAlertGroupMembers)
+	r.POST("/alert/group/:id/members", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:member:create"), AddAlertGroupMember)
+	r.DELETE("/alert/group/:id/members/:member_id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:group:member:delete"), DeleteAlertGroupMember)
 }
 
 // ListAlertTemplates 告警模板列表
@@ -286,8 +287,8 @@ func DeleteAlertTemplate(c *gin.Context) {
 
 // RegisterAlertTemplateRoutes 路由注册
 func RegisterAlertTemplateRoutes(r *gin.RouterGroup) {
-	r.GET("/alert-templates", ListAlertTemplates)
-	r.POST("/alert-templates", CreateAlertTemplate)
-	r.PUT("/alert-templates/:id", UpdateAlertTemplate)
-	r.DELETE("/alert-templates/:id", DeleteAlertTemplate)
+	r.GET("/alert/template", middleware.AuthMiddleware(), middleware.RequirePermission("notify:template:read"), ListAlertTemplates)
+	r.POST("/alert/template", middleware.AuthMiddleware(), middleware.RequirePermission("notify:template:create"), CreateAlertTemplate)
+	r.PUT("/alert/template/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:template:update"), UpdateAlertTemplate)
+	r.DELETE("/alert/template/:id", middleware.AuthMiddleware(), middleware.RequirePermission("notify:template:delete"), DeleteAlertTemplate)
 }

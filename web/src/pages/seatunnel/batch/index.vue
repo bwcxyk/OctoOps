@@ -309,7 +309,7 @@ async function onFormSubmit(ctx: SubmitContext) {
     };
 
     if (editForm.id) {
-      await updateTaskApi(editForm.id, payload);
+      await updateTaskApi(editForm.id, payload, 'batch');
       MessagePlugin.success('更新成功');
     } else {
       await createTaskApi(payload);
@@ -327,12 +327,12 @@ async function onFormSubmit(ctx: SubmitContext) {
 
 async function onDelete(id: number) {
   try {
-    await deleteTaskApi(id);
+    await deleteTaskApi(id, 'batch');
     MessagePlugin.success('删除成功');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('删除失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '删除失败');
   }
 }
 
@@ -349,12 +349,12 @@ async function onStatusChange(row: SeatunnelTask, status: 0 | 1) {
   }
 
   try {
-    await updateTaskApi(row.id, { status });
+    await updateTaskApi(row.id, { status }, 'batch');
     MessagePlugin.success('状态更新成功');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('状态更新失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '状态更新失败');
   }
 }
 

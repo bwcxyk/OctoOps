@@ -404,12 +404,12 @@ function showDetail(row: SeatunnelTask) {
 
 async function onDelete(id: number) {
   try {
-    await deleteTaskApi(id);
+    await deleteTaskApi(id, 'stream');
     MessagePlugin.success('删除成功');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('删除失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '删除失败');
   }
 }
 
@@ -436,7 +436,7 @@ async function onFormSubmit(ctx: SubmitContext) {
     };
 
     if (editForm.id) {
-      await updateTaskApi(editForm.id, payload);
+      await updateTaskApi(editForm.id, payload, 'stream');
       MessagePlugin.success('更新成功');
     } else {
       await createTaskApi(payload);
@@ -508,9 +508,9 @@ async function onSyncStatus() {
     await syncJobStatusApi();
     MessagePlugin.success('同步作业状态已触发');
     await fetchTasks();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error('同步失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '同步失败');
   } finally {
     syncing.value = false;
   }

@@ -3,7 +3,7 @@ import { request } from '@/utils/request';
 import type { AliyunSgConfig } from './model/aliyunModel';
 
 const Api = {
-  AliyunSgConfigs: '/aliyun-sg-configs',
+  AliyunSgConfigs: '/aliyun/ecs-sg',
 };
 
 export function getAliyunSgConfigsApi(params?: { name?: string; access_key?: string; status?: number }) {

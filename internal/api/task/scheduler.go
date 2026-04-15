@@ -2,6 +2,7 @@ package task
 
 import (
 	"net/http"
+	"octoops/internal/middleware"
 	"octoops/internal/scheduler"
 
 	"github.com/gin-gonic/gin"
@@ -33,8 +34,8 @@ func ReloadScheduler(c *gin.Context) {
 
 // 注册调度器相关路由
 func RegisterSchedulerRoutes(r *gin.RouterGroup) {
-	r.POST("/scheduler/start", StartSchedulerHandler)
-	r.POST("/scheduler/stop", StopSchedulerHandler)
-	r.GET("/scheduler/status", GetSchedulerStatus)
-	r.POST("/scheduler/reload", ReloadScheduler)
+	r.GET("/task/scheduler/status", middleware.AuthMiddleware(), middleware.RequirePermission("task:scheduler:status"), GetSchedulerStatus)
+	r.POST("/task/scheduler/reload", middleware.AuthMiddleware(), middleware.RequirePermission("task:scheduler:reload"), ReloadScheduler)
+	r.POST("/task/scheduler/start", middleware.AuthMiddleware(), middleware.RequirePermission("task:scheduler:start"), StartSchedulerHandler)
+	r.POST("/task/scheduler/stop", middleware.AuthMiddleware(), middleware.RequirePermission("task:scheduler:stop"), StopSchedulerHandler)
 }

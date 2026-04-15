@@ -27,11 +27,11 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest 更新用户请求
 type UpdateUserRequest struct {
-	Email    string `json:"email"`
+	Email   string `json:"email"`
 	Nickname string `json:"nickname"`
-	Avatar   string `json:"avatar"`
-	Status   *int   `json:"status"`
-	RoleIDs  []uint `json:"role_ids"`
+	Avatar  string `json:"avatar"`
+	Status  *int   `json:"status"`
+	RoleIDs []uint `json:"role_ids"`
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -82,9 +82,9 @@ func RegisterUserRoutes(r *gin.RouterGroup) {
 		users.POST("/change-password", changePassword)
 	}
 	// 忘记密码接口无需登录
-	r.POST("/users/forgot-password", forgotPassword)
+	users.POST("/forgot-password", forgotPassword)
 	// 发送验证码接口
-	r.POST("/users/send-reset-code", sendResetCode)
+	users.POST("/send-reset-code", sendResetCode)
 }
 
 // getUsers 获取用户列表
@@ -95,7 +95,7 @@ func getUsers(c *gin.Context) {
 	email := c.Query("email")
 	status := c.Query("status")
 
-	query := db.DB.Model(&model.User{}).Preload("Roles")
+	query := db.DB.Model(&model.User{}).Preload("Roles").Where("is_super_admin = ?", false)
 
 	// 添加查询条件
 	if username != "" {
@@ -115,7 +115,7 @@ func getUsers(c *gin.Context) {
 
 	var users []model.User
 	offset := (page - 1) * pageSize
-	if err := query.Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
+	if err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取用户列表失败",

@@ -3,12 +3,12 @@ import { request } from '@/utils/request';
 import type { CustomTaskListResult, SchedulerStatusResult } from './model/taskModel';
 
 const Api = {
-  CustomTasks: '/custom-tasks',
-  SchedulerStatus: '/scheduler/status',
-  SchedulerReload: '/scheduler/reload',
-  SchedulerStart: '/scheduler/start',
-  SchedulerStop: '/scheduler/stop',
-  TaskLogs: '/task-logs',
+  CustomTasks: '/task/custom',
+  SchedulerStatus: '/task/scheduler/status',
+  SchedulerReload: '/task/scheduler/reload',
+  SchedulerStart: '/task/scheduler/start',
+  SchedulerStop: '/task/scheduler/stop',
+  TaskLogs: '/task/log',
 };
 
 export function getCustomTasksApi(params: { page: number; page_size: number }) {

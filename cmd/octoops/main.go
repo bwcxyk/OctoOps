@@ -45,7 +45,9 @@ func main() {
 	// 需要认证的路由
 	taskApi.RegisterCustomTaskRoutes(apiGroup)
 	taskApi.RegisterSchedulerRoutes(apiGroup)
-	seatunnelApi.RegisterTaskRoutes(apiGroup)
+	taskApi.RegisterTaskLogRoutes(apiGroup)
+	seatunnelApi.RegisterStreamTaskRoutes(apiGroup)
+	seatunnelApi.RegisterBatchTaskRoutes(apiGroup)
 	aliyunApi.RegisterAliyunRoutes(apiGroup)
 	// 告警相关路由
 	alertApi.RegisterAlertChannelRoutes(apiGroup)

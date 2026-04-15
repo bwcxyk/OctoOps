@@ -151,6 +151,11 @@ func RequireAnyRole(roleNames ...string) gin.HandlerFunc {
 
 // HasPermission 检查用户是否有指定权限
 func HasPermission(user *model.User, permissionCode string) bool {
+	// 超级管理员拥有所有权限
+	if user.IsSuperAdmin {
+		return true
+	}
+
 	// 重新加载用户的角色和权限信息
 	var userWithRoles model.User
 	if err := db.DB.Preload("Roles.Permissions").First(&userWithRoles, user.ID).Error; err != nil {
@@ -182,6 +187,18 @@ func HasRole(user *model.User, roleName string) bool {
 
 // GetUserPermissions 获取用户所有权限
 func GetUserPermissions(user *model.User) []string {
+	// 超级管理员返回所有权限
+	if user.IsSuperAdmin {
+		var allPermissions []model.Permission
+		if err := db.DB.Where("status = ?", 1).Find(&allPermissions).Error; err == nil {
+			permissions := make([]string, 0, len(allPermissions))
+			for _, p := range allPermissions {
+				permissions = append(permissions, p.Code)
+			}
+			return permissions
+		}
+	}
+
 	var permissions []string
 	var userWithRoles model.User
 

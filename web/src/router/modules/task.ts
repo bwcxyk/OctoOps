@@ -22,7 +22,7 @@ export default [
         path: 'custom',
         name: 'CustomTaskManage',
         component: () => import('@/pages/task/custom/index.vue'),
-        meta: { title: { zh_CN: '自定义任务', en_US: 'Custom Task' }, permission: 'task:schedule' },
+        meta: { title: { zh_CN: '自定义任务', en_US: 'Custom Task' }, permission: 'task:custom' },
       },
       {
         path: 'log',
