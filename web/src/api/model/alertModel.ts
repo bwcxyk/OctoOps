@@ -22,7 +22,6 @@ export interface AlertGroup {
 export interface AlertTemplate {
   id: number;
   name: string;
-  type: 'email' | 'dingtalk' | 'weixin' | 'feishu' | string;
   content: string;
   created_at?: string;
   updated_at?: string;

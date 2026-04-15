@@ -26,7 +26,6 @@
 
       <t-table :data="pagedData" :columns="columns" row-key="id" :loading="loading" :hover="true">
         <template #index="{ rowIndex }">{{ rowIndex + 1 + (page - 1) * pageSize }}</template>
-        <template #type="{ row }">{{ typeLabel(row.type) }}</template>
         <template #name="{ row }">
           <t-link theme="primary" hover="color" @click="showDetail(row)">{{ row.name }}</t-link>
         </template>
@@ -63,14 +62,6 @@
         <t-form-item label="模板名称" name="name">
           <t-input v-model="editForm.name" />
         </t-form-item>
-        <t-form-item label="模板类型" name="type">
-          <t-select v-model="editForm.type" placeholder="请选择模板类型">
-            <t-option label="钉钉" value="dingtalk" />
-            <t-option label="企业微信" value="weixin" />
-            <t-option label="飞书" value="feishu" />
-            <t-option label="邮件" value="email" />
-          </t-select>
-        </t-form-item>
         <t-form-item label="内容" name="content">
           <div class="preview-container">
             <t-textarea v-model="editForm.content" :autosize="{ minRows: 12, maxRows: 16 }" />
@@ -90,7 +81,6 @@
     <t-dialog v-model:visible="detailDialogVisible" header="模板详情" width="640px" :footer="false">
       <t-descriptions class="detail-descriptions" :column="1" bordered>
         <t-descriptions-item label="模板名称">{{ detailForm.name }}</t-descriptions-item>
-        <t-descriptions-item label="类型">{{ typeLabel(detailForm.type || '') }}</t-descriptions-item>
         <t-descriptions-item label="内容">
           <t-textarea :model-value="detailForm.content || ''" readonly :autosize="{ minRows: 8, maxRows: 12 }" />
         </t-descriptions-item>
@@ -117,14 +107,12 @@ defineOptions({ name: 'AlertTemplateManage' });
 
 const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '序号', colKey: 'index', width: 80 },
-  { title: '模板名称', colKey: 'name', minWidth: 220 },
-  { title: '类型', colKey: 'type', width: 140 },
+  { title: '模板名称', colKey: 'name', minWidth: 280 },
   { title: '操作', colKey: 'op', width: 160 },
 ];
 
 const rules: Record<string, FormRule[]> = {
   name: [{ required: true, message: '模板名称必填', type: 'error' }],
-  type: [{ required: true, message: '模板类型必选', type: 'error' }],
   content: [{ required: true, message: '内容必填', type: 'error' }],
 };
 
@@ -142,29 +130,20 @@ const formRef = ref();
 const editForm = reactive<Partial<AlertTemplate>>({
   id: undefined,
   name: '',
-  type: '',
   content: '',
 });
 
 const detailForm = ref<Partial<AlertTemplate>>({});
 
 const previewContent = computed(() => editForm.content || '');
-const previewRenderMode = computed(() => (editForm.type === 'email' ? 'html' : 'markdown'));
 const markdown = new MarkdownIt({
   html: false,
   breaks: true,
   linkify: true,
 });
 
-const sanitizeHtml = (content: string) =>
-  content
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+=(['"]).*?\1/gi, '')
-    .replace(/\son\w+=\S+/gi, '');
-
 const previewRenderedContent = computed(() => {
   if (!previewContent.value) return '';
-  if (previewRenderMode.value === 'html') return sanitizeHtml(previewContent.value);
   return markdown.render(previewContent.value);
 });
 
@@ -172,14 +151,6 @@ const pagedData = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return templates.value.slice(start, start + pageSize.value);
 });
-
-const typeLabel = (type: string) => {
-  if (type === 'dingtalk') return '钉钉';
-  if (type === 'weixin') return '企业微信';
-  if (type === 'feishu') return '飞书';
-  if (type === 'email') return '邮件';
-  return type;
-};
 
 const fetchTemplates = async () => {
   loading.value = true;
@@ -197,7 +168,7 @@ const openEditDialog = (row?: AlertTemplate) => {
   if (row) {
     Object.assign(editForm, { ...row });
   } else {
-    Object.assign(editForm, { id: undefined, name: '', type: '', content: '' });
+    Object.assign(editForm, { id: undefined, name: '', content: '' });
   }
   editDialogVisible.value = true;
 };

@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"errors"
 	"net/http"
 	"octoops/internal/middleware"
 	alertModel "octoops/internal/model/alert"
@@ -34,6 +35,10 @@ func AddAlertGroupMember(c *gin.Context) {
 		return
 	}
 	if err := alertService.CreateAlertGroupMember(groupIDUint, &member); err != nil {
+		if errors.Is(err, alertService.ErrAlertGroupMemberExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": "成员已存在，不能重复添加"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建成员失败: " + err.Error()})
 		return
 	}

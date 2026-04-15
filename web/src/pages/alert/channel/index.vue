@@ -82,7 +82,7 @@
         </t-form-item>
         <t-form-item label="告警模板" name="template_id">
           <t-select v-model="editChannel.template_id" placeholder="请选择告警模板" :loading="templatesLoading">
-            <t-option v-for="tpl in filteredTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
+            <t-option v-for="tpl in templates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
           </t-select>
         </t-form-item>
       </t-form>
@@ -103,7 +103,7 @@
           <t-textarea
             v-model="testForm.templateContent"
             :autosize="{ minRows: 10, maxRows: 14 }"
-            placeholder="可选：支持 {{ .time }} / {{ .message }} / {{ .channel }}"
+            placeholder="默认自动带入绑定模板；支持 {{ .JobID }} / {{ .JobName }} / {{ .Status }} 等变量"
           />
         </t-form-item>
       </t-form>
@@ -194,22 +194,6 @@ const pagedData = computed(() => {
   return filteredChannels.value.slice(start, start + pageSize.value);
 });
 
-const filteredTemplates = computed(() => {
-  if (!editChannel.type) return templates.value;
-  const templateType = getTemplateTypeByChannelType(editChannel.type);
-  return templates.value.filter((tpl) => tpl.type === templateType);
-});
-
-function getTemplateTypeByChannelType(channelType: string) {
-  const map: Record<string, string> = {
-    dingtalk: 'dingtalk',
-    wechat: 'weixin',
-    feishu: 'feishu',
-    email: 'email',
-  };
-  return map[channelType] || channelType;
-}
-
 function platformLabel(val: string) {
   if (val === 'dingtalk') return '钉钉';
   if (val === 'feishu') return '飞书';
@@ -221,7 +205,11 @@ function platformLabel(val: string) {
 async function fetchChannels() {
   loading.value = true;
   try {
-    channels.value = await getAlertChannelsApi();
+    const data = await getAlertChannelsApi();
+    channels.value = (Array.isArray(data) ? data : []).map((item) => ({
+      ...item,
+      template_id: item.template_id && item.template_id > 0 ? item.template_id : null,
+    }));
   } catch (error) {
     console.error(error);
     MessagePlugin.error('获取渠道列表失败');
@@ -244,7 +232,10 @@ async function fetchTemplates() {
 
 function openDialog(row?: AlertChannel) {
   if (row) {
-    Object.assign(editChannel, { ...row });
+    Object.assign(editChannel, {
+      ...row,
+      template_id: row.template_id && row.template_id > 0 ? row.template_id : null,
+    });
   } else {
     Object.assign(editChannel, {
       id: undefined,
@@ -263,12 +254,6 @@ function onTypeChange() {
   if (editChannel.type !== 'dingtalk') {
     editChannel.dingtalk_secret = '';
   }
-  if (editChannel.template_id) {
-    const selected = templates.value.find((tpl) => tpl.id === editChannel.template_id);
-    if (selected && selected.type !== getTemplateTypeByChannelType(editChannel.type || '')) {
-      editChannel.template_id = null;
-    }
-  }
 }
 
 async function onSubmit() {
@@ -279,11 +264,15 @@ async function onFormSubmit(ctx: SubmitContext) {
   if (ctx.validateResult !== true) return;
   submitLoading.value = true;
   try {
+    const payload: Partial<AlertChannel> = {
+      ...editChannel,
+      template_id: editChannel.template_id && editChannel.template_id > 0 ? editChannel.template_id : 0,
+    };
     if (editChannel.id) {
-      await updateAlertChannelApi(editChannel.id, editChannel);
+      await updateAlertChannelApi(editChannel.id, payload);
       MessagePlugin.success('更新成功');
     } else {
-      await createAlertChannelApi(editChannel);
+      await createAlertChannelApi(payload);
       MessagePlugin.success('创建成功');
     }
     dialogVisible.value = false;
@@ -322,6 +311,12 @@ function openTestDialog(row: AlertChannel) {
   testForm.channelId = row.id;
   testForm.channelName = row.name;
   testForm.templateContent = '';
+  if (row.template_id) {
+    const matched = templates.value.find((tpl) => tpl.id === row.template_id);
+    if (matched?.content) {
+      testForm.templateContent = matched.content;
+    }
+  }
   testDialogVisible.value = true;
 }
 

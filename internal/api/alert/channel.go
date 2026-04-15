@@ -8,7 +8,6 @@ import (
 	alertModel "octoops/internal/model/alert"
 	alertService "octoops/internal/service/alert"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,7 +24,7 @@ func ListChannels(c *gin.Context) {
 
 // CreateChannel 新增渠道
 func CreateChannel(c *gin.Context) {
-	var channel alertModel.Channel
+	var channel alertModel.AlertChannel
 	if err := c.ShouldBindJSON(&channel); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -91,16 +90,18 @@ func TestChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "测试发送成功"})
 }
 
-func testChannelMessage(channel alertModel.Channel, templateContent string) error {
+func testChannelMessage(channel alertModel.AlertChannel, templateContent string) error {
+	if templateContent == "" && channel.TemplateID != 0 {
+		if tpl, err := alertService.GetAlertTemplateByID(fmt.Sprintf("%d", channel.TemplateID)); err == nil {
+			templateContent = strings.TrimSpace(tpl.Content)
+		}
+	}
+
 	var err error
 	switch channel.Type {
 	case "email":
 		if templateContent != "" {
-			err = alertService.SendEmailWithTemplate(&channel, templateContent, map[string]interface{}{
-				"channel": channel.Name,
-				"time":    time.Now().Format("2006-01-02 15:04:05"),
-				"message": "这是一条测试邮件通知。",
-			})
+			err = alertService.SendEmailWithTemplate(&channel, templateContent, nil)
 		} else {
 			err = alertService.SendTestEmail(&channel)
 		}
@@ -111,11 +112,7 @@ func testChannelMessage(channel alertModel.Channel, templateContent string) erro
 				channel.DingtalkSecret,
 				"OctoOps 测试通知",
 				templateContent,
-				map[string]interface{}{
-					"channel": channel.Name,
-					"time":    time.Now().Format("2006-01-02 15:04:05"),
-					"message": "这是一条测试机器人通知。",
-				},
+				nil,
 			)
 		} else {
 			err = alertService.SendTestRobot(&channel)

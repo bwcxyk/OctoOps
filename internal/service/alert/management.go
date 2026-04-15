@@ -1,40 +1,45 @@
 package alert
 
 import (
+	"errors"
 	"fmt"
 	"octoops/internal/db"
 	alertModel "octoops/internal/model/alert"
+
+	"gorm.io/gorm"
 )
 
-func ListChannels() ([]alertModel.Channel, error) {
-	var channels []alertModel.Channel
+var ErrAlertGroupMemberExists = errors.New("告警组成员已存在")
+
+func ListChannels() ([]alertModel.AlertChannel, error) {
+	var channels []alertModel.AlertChannel
 	err := db.DB.Order("created_at desc").Find(&channels).Error
 	return channels, err
 }
 
-func CreateChannel(channel *alertModel.Channel) error {
+func CreateChannel(channel *alertModel.AlertChannel) error {
 	return db.DB.Create(channel).Error
 }
 
-func GetChannelByID(id string) (alertModel.Channel, error) {
-	var channel alertModel.Channel
+func GetChannelByID(id string) (alertModel.AlertChannel, error) {
+	var channel alertModel.AlertChannel
 	err := db.DB.First(&channel, id).Error
 	return channel, err
 }
 
-func UpdateChannel(id string, updates map[string]interface{}) (alertModel.Channel, error) {
+func UpdateChannel(id string, updates map[string]interface{}) (alertModel.AlertChannel, error) {
 	channel, err := GetChannelByID(id)
 	if err != nil {
-		return alertModel.Channel{}, err
+		return alertModel.AlertChannel{}, err
 	}
 	if err := db.DB.Model(&channel).Updates(updates).Error; err != nil {
-		return alertModel.Channel{}, err
+		return alertModel.AlertChannel{}, err
 	}
 	return channel, nil
 }
 
 func DeleteChannel(id string) error {
-	return db.DB.Delete(&alertModel.Channel{}, id).Error
+	return db.DB.Delete(&alertModel.AlertChannel{}, id).Error
 }
 
 func ListAlertGroups() ([]alertModel.AlertGroup, error) {
@@ -81,7 +86,26 @@ func ListAlertGroupMembers(groupID string) ([]alertModel.AlertGroupMember, error
 
 func CreateAlertGroupMember(groupID uint, member *alertModel.AlertGroupMember) error {
 	member.GroupID = groupID
-	return db.DB.Create(member).Error
+	var existing alertModel.AlertGroupMember
+	if err := db.DB.Where(
+		"group_id = ? AND channel_type = ? AND channel_id = ?",
+		member.GroupID,
+		member.ChannelType,
+		member.ChannelID,
+	).First(&existing).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	} else {
+		return ErrAlertGroupMemberExists
+	}
+	if err := db.DB.Create(member).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return ErrAlertGroupMemberExists
+		}
+		return err
+	}
+	return nil
 }
 
 func DeleteAlertGroupMember(memberID string) error {
@@ -111,7 +135,6 @@ func UpdateAlertTemplate(id string, req alertModel.AlertTemplate) (alertModel.Al
 	}
 	updates := map[string]interface{}{
 		"name":    req.Name,
-		"type":    req.Type,
 		"content": req.Content,
 	}
 	if err := db.DB.Model(&tpl).Updates(updates).Error; err != nil {

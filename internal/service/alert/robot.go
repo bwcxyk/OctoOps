@@ -26,7 +26,7 @@ func dingtalkSign(secret string) (string, string) {
 }
 
 // 钉钉机器人测试发送
-func SendTestRobot(alert *alertModel.Channel) error {
+func SendTestRobot(alert *alertModel.AlertChannel) error {
 	msg := map[string]interface{}{
 		"msgtype": "text",
 		"text":    map[string]string{"content": "这是一条测试机器人通知。"},
@@ -69,20 +69,24 @@ func SendTestRobot(alert *alertModel.Channel) error {
 
 // 发送钉钉 markdown 消息，支持模板渲染
 func SendDingTalkMarkdownWithTemplate(webhook, secret, title, tplContent string, data map[string]interface{}) error {
-	// 渲染模板
-	tpl, err := template.New("msg").Parse(tplContent)
-	if err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	if err := tpl.Execute(&buf, data); err != nil {
-		return err
+	content := tplContent
+	if data != nil {
+		// 渲染模板
+		tpl, err := template.New("msg").Parse(tplContent)
+		if err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		if err := tpl.Execute(&buf, data); err != nil {
+			return err
+		}
+		content = buf.String()
 	}
 	msg := map[string]interface{}{
 		"msgtype": "markdown",
 		"markdown": map[string]string{
 			"title": title,
-			"text":  buf.String(),
+			"text":  content,
 		},
 	}
 	jsonData, _ := json.Marshal(msg)

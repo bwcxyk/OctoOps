@@ -9,6 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type alertTemplateReq struct {
+	Name    string `json:"name" binding:"required"`
+	Content string `json:"content" binding:"required"`
+}
+
 // ListAlertTemplates 告警模板列表
 func ListAlertTemplates(c *gin.Context) {
 	templates, err := alertService.ListAlertTemplates()
@@ -21,10 +26,14 @@ func ListAlertTemplates(c *gin.Context) {
 
 // CreateAlertTemplate 新建告警模板
 func CreateAlertTemplate(c *gin.Context) {
-	var tpl alertModel.AlertTemplate
-	if err := c.ShouldBindJSON(&tpl); err != nil {
+	var req alertTemplateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	tpl := alertModel.AlertTemplate{
+		Name:    req.Name,
+		Content: req.Content,
 	}
 	if err := alertService.CreateAlertTemplate(&tpl); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建模板失败: " + err.Error()})
@@ -36,12 +45,15 @@ func CreateAlertTemplate(c *gin.Context) {
 // UpdateAlertTemplate 更新告警模板
 func UpdateAlertTemplate(c *gin.Context) {
 	id := c.Param("id")
-	var req alertModel.AlertTemplate
+	var req alertTemplateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	tpl, err := alertService.UpdateAlertTemplate(id, req)
+	tpl, err := alertService.UpdateAlertTemplate(id, alertModel.AlertTemplate{
+		Name:    req.Name,
+		Content: req.Content,
+	})
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
