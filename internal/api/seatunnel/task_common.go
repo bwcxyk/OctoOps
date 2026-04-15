@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
-	"octoops/internal/db"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	"octoops/internal/scheduler"
+	seatunnelService "octoops/internal/service/seatunnel"
 	"strconv"
 	"time"
 
@@ -18,32 +18,6 @@ type TaskWithNextRun struct {
 }
 
 func listTasks(c *gin.Context, fixedTaskType string) {
-	var tasks []seatunnelModel.EtlTask
-	query := db.DB
-	if fixedTaskType != "" {
-		query = query.Where("task_type = ?", fixedTaskType)
-	} else if taskType := c.Query("task_type"); taskType != "" {
-		query = query.Where("task_type = ?", taskType)
-	}
-	if name := c.Query("name"); name != "" {
-		query = query.Where("name LIKE ?", "%"+name+"%")
-	}
-	if status := c.Query("status"); status != "" {
-		if status == "1" {
-			query = query.Where("status = ?", 1)
-		} else if status == "0" {
-			query = query.Where("status = ?", 0)
-		}
-	}
-	if jobID := c.Query("job_id"); jobID != "" {
-		query = query.Where("job_id = ?", jobID)
-	}
-	if jobStatus := c.Query("job_status"); jobStatus != "" {
-		query = query.Where("job_status = ?", jobStatus)
-	}
-	query = query.Order("created_at desc")
-
-	// 分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	if page < 1 {
@@ -53,10 +27,31 @@ func listTasks(c *gin.Context, fixedTaskType string) {
 		pageSize = 10
 	}
 
-	var total int64
-	query.Model(&seatunnelModel.EtlTask{}).Count(&total)
-	query = query.Limit(pageSize).Offset((page - 1) * pageSize)
-	query.Find(&tasks)
+	filter := seatunnelService.TaskListFilter{
+		Page:      page,
+		PageSize:  pageSize,
+		JobID:     c.Query("job_id"),
+		JobStatus: c.Query("job_status"),
+		Name:      c.Query("name"),
+	}
+	if fixedTaskType != "" {
+		filter.TaskType = fixedTaskType
+	} else {
+		filter.TaskType = c.Query("task_type")
+	}
+	if status := c.Query("status"); status == "1" {
+		active := 1
+		filter.Status = &active
+	} else if status == "0" {
+		inactive := 0
+		filter.Status = &inactive
+	}
+
+	tasks, total, err := seatunnelService.ListTasks(filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询任务失败: " + err.Error()})
+		return
+	}
 
 	// 获取所有任务的下次执行时间
 	nextRunTimes := scheduler.GetAllTasksNextRunTime()
@@ -92,7 +87,10 @@ func createTask(c *gin.Context, fixedTaskType string) {
 		}
 		task.TaskType = fixedTaskType
 	}
-	db.DB.Create(&task)
+	if err := seatunnelService.CreateTask(&task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建任务失败: " + err.Error()})
+		return
+	}
 
 	// 如果是批处理任务且状态为active且有cron表达式，添加到调度器
 	if task.TaskType == "batch" && task.Status == 1 && task.CronExpr != "" {
@@ -105,9 +103,8 @@ func createTask(c *gin.Context, fixedTaskType string) {
 func deleteTask(c *gin.Context, fixedTaskType string) {
 	id := c.Param("id")
 
-	// 先获取任务信息
-	var task seatunnelModel.EtlTask
-	if err := db.DB.First(&task, id).Error; err != nil {
+	task, err := seatunnelService.GetTaskByID(id)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
@@ -121,16 +118,18 @@ func deleteTask(c *gin.Context, fixedTaskType string) {
 		scheduler.RemoveTask(task.ID)
 	}
 
-	// 删除任务
-	db.DB.Delete(&task)
+	if err := seatunnelService.DeleteTask(&task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除任务失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
 }
 
 // 更新任务时同步更新调度器
 func updateTaskWithScheduler(c *gin.Context, fixedTaskType string) {
 	id := c.Param("id")
-	var dbTask seatunnelModel.EtlTask
-	if err := db.DB.First(&dbTask, id).Error; err != nil {
+	dbTask, err := seatunnelService.GetTaskByID(id)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
@@ -148,7 +147,10 @@ func updateTaskWithScheduler(c *gin.Context, fixedTaskType string) {
 	// 保证ID和JobID不变
 	req["id"] = dbTask.ID
 	req["task_type"] = dbTask.TaskType
-	db.DB.Model(&dbTask).Updates(req)
+	if err := seatunnelService.UpdateTask(&dbTask, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新任务失败: " + err.Error()})
+		return
+	}
 
 	// 刷新调度器
 	if dbTask.TaskType == "batch" && dbTask.CronExpr != "" {
