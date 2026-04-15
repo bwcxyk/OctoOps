@@ -29,6 +29,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o octoops-init ./cmd/init-rb
 
 # --------- 运行阶段 ---------
 FROM debian:bullseye-slim
+ENV TZ=Asia/Shanghai
 
 WORKDIR /app
 
