@@ -8,6 +8,7 @@
       </t-row>
 
       <t-table :data="roles" :columns="columns" row-key="id" :loading="loading" :hover="true">
+        <template #index="{ rowIndex }">{{ rowIndex + 1 + (page - 1) * pageSize }}</template>
         <template #status="{ row }">
           <t-tag :theme="row.status === 1 ? 'success' : 'warning'" variant="light">
             {{ row.status === 1 ? '正常' : '禁用' }}
@@ -88,7 +89,7 @@ interface RoleEditForm {
 }
 
 const columns: PrimaryTableCol<TableRowData>[] = [
-  { title: 'ID', colKey: 'id', width: 80 },
+  { title: '序号', colKey: 'index', width: 80 },
   { title: '角色名', colKey: 'name', minWidth: 180 },
   { title: '描述', colKey: 'description', minWidth: 220 },
   { title: '状态', colKey: 'status', width: 110 },

@@ -65,7 +65,7 @@ func getRoles(c *gin.Context) {
 
 	var roles []model.Role
 	offset := (page - 1) * pageSize
-	if err := query.Offset(offset).Limit(pageSize).Find(&roles).Error; err != nil {
+	if err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&roles).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取角色列表失败",

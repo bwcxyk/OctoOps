@@ -81,7 +81,7 @@ func getPermissions(c *gin.Context) {
 
 	var permissions []model.Permission
 	offset := (page - 1) * pageSize
-	if err := query.Offset(offset).Limit(pageSize).Find(&permissions).Error; err != nil {
+	if err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&permissions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取权限列表失败",

@@ -8,6 +8,7 @@
       </t-row>
 
       <t-table :data="users" :columns="columns" row-key="id" :loading="loading" :hover="true">
+        <template #index="{ rowIndex }">{{ rowIndex + 1 + (page - 1) * pageSize }}</template>
         <template #roles="{ row }">
           {{ formatRoles(row.roles) }}
         </template>
@@ -90,7 +91,7 @@ interface UserEditForm {
 }
 
 const columns: PrimaryTableCol<TableRowData>[] = [
-  { title: 'ID', colKey: 'id', width: 80 },
+  { title: '序号', colKey: 'index', width: 80 },
   { title: '用户名', colKey: 'username', minWidth: 160 },
   { title: '邮箱', colKey: 'email', minWidth: 220 },
   { title: '昵称', colKey: 'nickname', minWidth: 140 },

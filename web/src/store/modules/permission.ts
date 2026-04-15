@@ -18,9 +18,15 @@ function filterRoutesByPermission(routes: RouteRecordRaw[], permissions: string[
   const loop = (list: RouteRecordRaw[]): RouteRecordRaw[] => {
     return list
       .map((route) => {
-        const children: RouteRecordRaw[] = route.children ? loop(route.children) : [];
+        const hasOriginChildren = Array.isArray(route.children) && route.children.length > 0;
+        const children: RouteRecordRaw[] = hasOriginChildren ? loop(route.children) : [];
         const current: RouteRecordRaw = { ...route, children };
         const canVisitCurrent = hasPermission(current, permissions);
+
+        // 父级菜单如果没有任何可访问子路由，则不显示
+        if (hasOriginChildren && children.length === 0) {
+          return null;
+        }
 
         if (children.length > 0) {
           return current;

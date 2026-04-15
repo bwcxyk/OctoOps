@@ -8,6 +8,7 @@
       </t-row>
 
       <t-table :data="permissions" :columns="columns" row-key="id" :loading="loading" :hover="true">
+        <template #index="{ rowIndex }">{{ rowIndex + 1 + (page - 1) * pageSize }}</template>
         <template #type="{ row }">
           <t-tag :theme="row.type === 'menu' ? 'primary' : 'default'" variant="light">
             {{ row.type === 'menu' ? '菜单' : '接口' }}
@@ -102,7 +103,7 @@ interface PermissionEditForm {
 }
 
 const columns: PrimaryTableCol<TableRowData>[] = [
-  { title: 'ID', colKey: 'id', width: 80 },
+  { title: '序号', colKey: 'index', width: 80 },
   { title: '权限名', colKey: 'name', minWidth: 180 },
   { title: '标识', colKey: 'code', minWidth: 220 },
   { title: '类型', colKey: 'type', width: 110 },
