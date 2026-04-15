@@ -38,7 +38,7 @@ func Init() {
 	if err := DB.AutoMigrate(
 		&seatunnelModel.EtlTask{},
 		&aliyunModel.SGConfig{},
-		&alertModel.Channel{},
+		&alertModel.AlertChannel{},
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},

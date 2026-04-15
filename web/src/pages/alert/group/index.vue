@@ -277,7 +277,7 @@ const addMember = async () => {
     await fetchMembers();
   } catch (error) {
     console.error(error);
-    MessagePlugin.error('添加成员失败');
+    MessagePlugin.error(error instanceof Error ? error.message : '添加成员失败');
   }
 };
 

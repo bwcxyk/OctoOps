@@ -1,14 +1,11 @@
 package aliyun
 
 import (
-	"encoding/base64"
+	"errors"
 	"net/http"
-	"octoops/internal/db"
 	"octoops/internal/middleware"
 	aliyunModel "octoops/internal/model/aliyun"
 	aliyunService "octoops/internal/service/aliyun"
-	"octoops/internal/utils"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,21 +13,11 @@ import (
 
 // 获取所有安全组配置
 func ListAliyunSGConfigs(c *gin.Context) {
-	var configs []aliyunModel.SGConfig
-	status := c.Query("status")
-	accessKey := c.Query("access_key")
-	name := c.Query("name")
-	query := db.DB.Order("created_at desc")
-	if status != "" {
-		query = query.Where("status = ?", status)
+	configs, err := aliyunService.ListEcsSecurityGroupConfigs(c.Query("status"), c.Query("access_key"), c.Query("name"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询安全组配置失败: " + err.Error()})
+		return
 	}
-	if accessKey != "" {
-		query = query.Where("access_key = ?", accessKey)
-	}
-	if name != "" {
-		query = query.Where("name LIKE ?", "%"+name+"%")
-	}
-	query.Find(&configs)
 	c.JSON(http.StatusOK, configs)
 }
 
@@ -41,66 +28,49 @@ func CreateAliyunSGConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// 只加密 SK
-	sk, err := utils.EncryptAES(cfg.AccessSecret)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "SK加密失败: " + err.Error()})
+	if err := aliyunService.CreateEcsSecurityGroupConfig(&cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	cfg.AccessSecret = sk
-	db.DB.Create(&cfg)
 	c.JSON(http.StatusOK, cfg)
 }
 
 // 更新安全组配置
 func UpdateAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg aliyunModel.SGConfig
-	if err := db.DB.First(&cfg, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-		return
-	}
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if sk, ok := req["access_secret"].(string); ok && sk != "" {
-		_, decodeErr := base64.StdEncoding.DecodeString(sk)
-		if decodeErr != nil || len(sk) < 32 {
-			encrypted, err := utils.EncryptAES(sk)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "SK加密失败: " + err.Error()})
-				return
-			}
-			req["access_secret"] = encrypted
+	cfg, err := aliyunService.UpdateEcsSecurityGroupConfig(id, req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
 		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	db.DB.Model(&cfg).Updates(req)
 	c.JSON(http.StatusOK, cfg)
 }
 
 // 删除安全组配置
 func DeleteAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	db.DB.Delete(&aliyunModel.SGConfig{}, id)
+	if err := aliyunService.DeleteEcsSecurityGroupConfig(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败: " + err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // 单条同步安全组端口到阿里云
 func SyncAliyunSGConfig(c *gin.Context) {
 	id := c.Param("id")
-	var cfg aliyunModel.SGConfig
-	if err := db.DB.First(&cfg, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-		return
-	}
-	dbIns := db.DB.Session(&gorm.Session{})
-	dbIns = dbIns.Model(&aliyunModel.SGConfig{}).Where("id = ?", cfg.ID)
-	err := aliyunService.UpdateSecurityGroupIfIPChanged(dbIns)
-	if err != nil {
-		if strings.Contains(err.Error(), "InvalidSecurityGroupId.NotFound") {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "找不到安全组，请检查安全组ID、Region和AK/SK配置是否正确。"})
+	if err := aliyunService.SyncEcsSecurityGroupConfigByID(id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

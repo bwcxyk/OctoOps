@@ -18,9 +18,9 @@ type AlertGroup struct {
 
 type AlertGroupMember struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
-	GroupID     uint           `json:"group_id"`
-	ChannelType string         `gorm:"size:64" json:"channel_type"` // email/robot/other
-	ChannelID   uint           `json:"channel_id"`
+	GroupID     uint           `gorm:"uniqueIndex:idx_alert_group_member_unique,where:deleted_at IS NULL" json:"group_id"`
+	ChannelType string         `gorm:"size:64;uniqueIndex:idx_alert_group_member_unique,where:deleted_at IS NULL" json:"channel_type"` // email/robot/other
+	ChannelID   uint           `gorm:"uniqueIndex:idx_alert_group_member_unique,where:deleted_at IS NULL" json:"channel_id"`
 	CreatedAt   time.Time      `json:"created_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
