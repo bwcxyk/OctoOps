@@ -86,6 +86,7 @@ func ListAlertGroupMembers(groupID string) ([]alertModel.AlertGroupMember, error
 
 func CreateAlertGroupMember(groupID uint, member *alertModel.AlertGroupMember) error {
 	member.GroupID = groupID
+
 	var existing alertModel.AlertGroupMember
 	if err := db.DB.Where(
 		"group_id = ? AND channel_type = ? AND channel_id = ?",
