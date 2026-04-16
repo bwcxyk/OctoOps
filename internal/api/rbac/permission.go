@@ -1,4 +1,4 @@
-package api
+package rbac
 
 import (
 	"net/http"

@@ -1,4 +1,4 @@
-package api
+package seatunnel
 
 import (
 	"octoops/internal/middleware"

@@ -1,19 +1,30 @@
-package api
+package rbac
 
 import (
+	"crypto/rand"
 	"log"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"octoops/internal/db"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
 	"octoops/internal/utils"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+)
+
+const maxPageSize = 100
+
+const (
+	resetCodeTTL            = 5 * time.Minute
+	resetCodeResendInterval = 60 * time.Second
+	resetCodeSendWindow     = 1 * time.Hour
+	resetCodeSendLimit      = 5
+	resetCodeMaxAttempts    = 5
 )
 
 // CreateUserRequest 创建用户请求
@@ -27,11 +38,11 @@ type CreateUserRequest struct {
 
 // UpdateUserRequest 更新用户请求
 type UpdateUserRequest struct {
-	Email   string `json:"email"`
+	Email    string `json:"email"`
 	Nickname string `json:"nickname"`
-	Avatar  string `json:"avatar"`
-	Status  *int   `json:"status"`
-	RoleIDs []uint `json:"role_ids"`
+	Avatar   string `json:"avatar"`
+	Status   *int   `json:"status"`
+	RoleIDs  []uint `json:"role_ids"`
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -43,28 +54,27 @@ type ChangePasswordRequest struct {
 // ForgotPasswordRequest 忘记密码请求
 // 用户名+邮箱+新密码
 // 生产环境建议加验证码
-//
 type ForgotPasswordRequest struct {
 	Username    string `json:"username" binding:"required"`
 	Email       string `json:"email" binding:"required,email"`
 	NewPassword string `json:"new_password" binding:"required"`
 }
 
-// 简单内存验证码存储（生产建议用 Redis）
-var resetCodeStore = struct {
-	sync.RWMutex
-	m map[string]resetCodeEntry
-}{m: make(map[string]resetCodeEntry)}
-
 type resetCodeEntry struct {
-	Code      string
-	ExpiresAt time.Time
+	Code           string
+	ExpiresAt      time.Time
+	VerifyAttempts int
+}
+
+type resetRateEntry struct {
+	WindowStart time.Time
+	SendCount   int
+	LastSentAt  time.Time
 }
 
 // SendResetCodeRequest 发送验证码请求
-//
 type SendResetCodeRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email string `json:"email" binding:"required,email"`
 }
 
 // RegisterUserRoutes 注册用户管理路由
@@ -94,6 +104,15 @@ func getUsers(c *gin.Context) {
 	username := c.Query("username")
 	email := c.Query("email")
 	status := c.Query("status")
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
 
 	query := db.DB.Model(&model.User{}).Preload("Roles").Where("is_super_admin = ?", false)
 
@@ -111,7 +130,13 @@ func getUsers(c *gin.Context) {
 	}
 
 	var total int64
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "统计用户数量失败",
+		})
+		return
+	}
 
 	var users []model.User
 	offset := (page - 1) * pageSize
@@ -201,6 +226,14 @@ func createUser(c *gin.Context) {
 		return
 	}
 
+	if err := utils.ValidatePasswordComplexity(req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
 	// 加密密码
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
@@ -251,7 +284,13 @@ func createUser(c *gin.Context) {
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "创建用户失败",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -359,7 +398,13 @@ func updateUser(c *gin.Context) {
 		}
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "更新用户失败",
+		})
+		return
+	}
 
 	// 重新加载用户信息
 	db.DB.Preload("Roles").First(&user, user.ID)
@@ -405,7 +450,13 @@ func deleteUser(c *gin.Context) {
 		return
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "删除用户失败",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -445,16 +496,65 @@ func assignRoles(c *gin.Context) {
 		return
 	}
 
-	// 分配角色
-	var userRoles []model.UserRole
+	// 去重，避免重复 role_id 导致无效写入或唯一键冲突
+	uniqueRoleIDs := make([]uint, 0, len(req.RoleIDs))
+	roleIDSet := make(map[uint]struct{}, len(req.RoleIDs))
 	for _, roleID := range req.RoleIDs {
-		userRoles = append(userRoles, model.UserRole{
+		if _, exists := roleIDSet[roleID]; exists {
+			continue
+		}
+		roleIDSet[roleID] = struct{}{}
+		uniqueRoleIDs = append(uniqueRoleIDs, roleID)
+	}
+	if len(uniqueRoleIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": "role_ids 不能为空",
+		})
+		return
+	}
+
+	tx := db.DB.Begin()
+
+	// 只插入缺失的角色关联，实现幂等
+	var existingUserRoles []model.UserRole
+	if err := tx.Where("user_id = ? AND role_id IN ?", user.ID, uniqueRoleIDs).Find(&existingUserRoles).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "查询现有角色关联失败",
+		})
+		return
+	}
+
+	existingRoleSet := make(map[uint]struct{}, len(existingUserRoles))
+	for _, ur := range existingUserRoles {
+		existingRoleSet[ur.RoleID] = struct{}{}
+	}
+
+	userRolesToCreate := make([]model.UserRole, 0, len(uniqueRoleIDs))
+	for _, roleID := range uniqueRoleIDs {
+		if _, exists := existingRoleSet[roleID]; exists {
+			continue
+		}
+		userRolesToCreate = append(userRolesToCreate, model.UserRole{
 			UserID: user.ID,
 			RoleID: roleID,
 		})
 	}
 
-	if err := db.DB.Create(&userRoles).Error; err != nil {
+	if len(userRolesToCreate) > 0 {
+		if err := tx.Create(&userRolesToCreate).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"message": "分配角色失败",
+			})
+			return
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "分配角色失败",
@@ -534,6 +634,14 @@ func changePassword(c *gin.Context) {
 		return
 	}
 
+	if err := utils.ValidatePasswordComplexity(req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
+		})
+		return
+	}
+
 	// 加密新密码
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
 	if err != nil {
@@ -566,35 +674,57 @@ func sendResetCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请求参数错误", "error": err.Error()})
 		return
 	}
+	email := normalizeEmail(req.Email)
+	now := time.Now()
+	rateKey := buildResetRateKey(email, c.ClientIP())
+
+	if !allowSendResetCode(rateKey, now) {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"code":    429,
+			"message": "请求过于频繁，请稍后再试",
+		})
+		return
+	}
+
 	var user model.User
-	if err := db.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "邮箱未注册"})
+	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		// 防枚举：统一响应，不暴露邮箱是否存在。
+		c.JSON(http.StatusOK, gin.H{"code": 200, "message": "如邮箱已注册，验证码已发送"})
 		return
 	}
 	// 生成6位验证码
 	code := ""
-	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < 6; i++ {
-		code += strconv.Itoa(rand.Intn(10))
+		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码生成失败"})
+			return
+		}
+		code += strconv.FormatInt(n.Int64(), 10)
 	}
 	// 存储验证码，5分钟有效
-	resetCodeStore.Lock()
-	resetCodeStore.m[req.Email] = resetCodeEntry{Code: code, ExpiresAt: time.Now().Add(5 * time.Minute)}
-	resetCodeStore.Unlock()
-	// TODO: 发送邮件（此处仅打印，生产环境请集成邮件服务）
+	if err := passwordResetStore.SetCode(email, resetCodeEntry{
+		Code:           code,
+		ExpiresAt:      now.Add(resetCodeTTL),
+		VerifyAttempts: 0,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码存储失败"})
+		return
+	}
 	subject := "OctoOps 验证码"
 	body := "您的验证码为 <b>" + code + "</b>，5分钟内有效。"
 	if err := utils.SendMail(utils.MailOptions{
-		To:      req.Email,
+		To:      email,
 		Subject: subject,
 		Body:    body,
 	}); err != nil {
 		log.Printf("发送邮件失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "邮件发送失败"})
+		// 防枚举：统一响应，不暴露邮箱是否存在或邮件系统状态。
+		c.JSON(http.StatusOK, gin.H{"code": 200, "message": "如邮箱已注册，验证码已发送"})
 		return
 	}
-	log.Printf("向 %s 发送验证码: %s", req.Email, code)
-	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "验证码已发送到邮箱"})
+	log.Printf("向 %s 发送验证码邮件成功", email)
+	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "如邮箱已注册，验证码已发送"})
 }
 
 // forgotPassword 忘记密码
@@ -609,21 +739,45 @@ func forgotPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请求参数错误", "error": err.Error()})
 		return
 	}
+	email := normalizeEmail(req.Email)
 	// 校验验证码
-	resetCodeStore.RLock()
-	entry, ok := resetCodeStore.m[req.Email]
-	resetCodeStore.RUnlock()
-	if !ok || entry.ExpiresAt.Before(time.Now()) || entry.Code != req.Code {
+	entry, ok, err := passwordResetStore.GetCode(email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
+		return
+	}
+	if !ok || entry.ExpiresAt.Before(time.Now()) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "验证码错误或已过期"})
+		return
+	}
+	if entry.Code != req.Code {
+		entry.VerifyAttempts++
+		if entry.VerifyAttempts >= resetCodeMaxAttempts {
+			if err := passwordResetStore.DeleteCode(email); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
+				return
+			}
+		} else {
+			if err := passwordResetStore.SetCode(email, entry); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
+				return
+			}
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "验证码错误或已过期"})
 		return
 	}
 	// 验证通过后删除验证码
-	resetCodeStore.Lock()
-	delete(resetCodeStore.m, req.Email)
-	resetCodeStore.Unlock()
+	if err := passwordResetStore.DeleteCode(email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
+		return
+	}
 	var user model.User
-	if err := db.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "邮箱未注册"})
+	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "验证码错误或已过期"})
+		return
+	}
+	if err := utils.ValidatePasswordComplexity(req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 	hashedPassword, err := utils.HashPassword(req.NewPassword)
@@ -636,4 +790,38 @@ func forgotPassword(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "密码重置成功，请重新登录"})
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func buildResetRateKey(email, ip string) string {
+	return email + "|" + ip
+}
+
+func allowSendResetCode(key string, now time.Time) bool {
+	entry, exists, err := passwordResetStore.GetRate(key)
+	if err != nil {
+		return false
+	}
+	if !exists || now.Sub(entry.WindowStart) >= resetCodeSendWindow {
+		err := passwordResetStore.SetRate(key, resetRateEntry{
+			WindowStart: now,
+			SendCount:   1,
+			LastSentAt:  now,
+		})
+		return err == nil
+	}
+
+	if now.Sub(entry.LastSentAt) < resetCodeResendInterval {
+		return false
+	}
+	if entry.SendCount >= resetCodeSendLimit {
+		return false
+	}
+
+	entry.SendCount++
+	entry.LastSentAt = now
+	return passwordResetStore.SetRate(key, entry) == nil
 }

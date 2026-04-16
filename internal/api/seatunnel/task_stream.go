@@ -1,4 +1,4 @@
-package api
+package seatunnel
 
 import (
 	"fmt"
@@ -139,7 +139,8 @@ func StopJob(c *gin.Context) {
 	}
 	body := fmt.Sprintf(`{"jobId": "%s", "isStopWithSavePoint": %s}`, *task.JobID, isStopWithSavePoint)
 	url := config.SeatunnelBaseURL + "/stop-job"
-	resp, err := http.Post(url, "application/json", strings.NewReader(body))
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
 		log.Printf("[ETL] 停止作业失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Seatunnel 服务，请检查服务是否已启动且网络正常"})

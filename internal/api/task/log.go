@@ -1,6 +1,7 @@
 package task
 
 import (
+	"net/http"
 	"strconv"
 
 	"octoops/internal/db"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const maxPageSize = 100
 
 // 获取任务日志
 func ListTaskLogs(c *gin.Context) {
@@ -36,13 +39,26 @@ func ListTaskLogs(c *gin.Context) {
 	if pageSize < 1 {
 		pageSize = 10
 	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
 
 	var total int64
-	query.Model(&taskModel.TaskLog{}).Count(&total)
+	if err := query.Model(&taskModel.TaskLog{}).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "统计任务日志失败",
+		})
+		return
+	}
 	query = query.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize)
-	query.Find(&logs)
+	if err := query.Find(&logs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "查询任务日志失败",
+		})
+		return
+	}
 
-	c.JSON(200, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"data":  logs,
 		"total": total,
 	})

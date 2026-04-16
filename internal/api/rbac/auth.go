@@ -1,4 +1,4 @@
-package api
+package rbac
 
 import (
 	"net/http"
@@ -28,10 +28,10 @@ type RegisterRequest struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	Token        string   `json:"token"`
-	User         UserInfo `json:"user"`
-	Roles        []string `json:"roles"`
-	Permissions  []string `json:"permissions"`
+	Token       string   `json:"token"`
+	User        UserInfo `json:"user"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
 }
 
 // UserInfo 用户信息
@@ -129,8 +129,8 @@ func login(c *gin.Context) {
 		"code":    200,
 		"message": "登录成功",
 		"data": LoginResponse{
-			Token:       token,
-			User:        UserInfo{
+			Token: token,
+			User: UserInfo{
 				ID:           user.ID,
 				Username:     user.Username,
 				Email:        user.Email,
@@ -172,6 +172,14 @@ func register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "邮箱已存在",
+		})
+		return
+	}
+
+	if err := utils.ValidatePasswordComplexity(req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    400,
+			"message": err.Error(),
 		})
 		return
 	}
@@ -292,4 +300,4 @@ func getUserPermissions(c *gin.Context) {
 			"roles":       roles,
 		},
 	})
-} 
+}
