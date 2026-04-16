@@ -80,21 +80,23 @@ type SendResetCodeRequest struct {
 // RegisterUserRoutes 注册用户管理路由
 func RegisterUserRoutes(r *gin.RouterGroup) {
 	users := r.Group("/users")
-	users.Use(middleware.AuthMiddleware())
-	{
-		users.GET("", middleware.RequirePermission("rbac:user:read"), getUsers)
-		users.GET("/:id", middleware.RequirePermission("rbac:user:read"), getUser)
-		users.POST("", middleware.RequirePermission("rbac:user:create"), createUser)
-		users.PUT("/:id", middleware.RequirePermission("rbac:user:update"), updateUser)
-		users.DELETE("/:id", middleware.RequirePermission("rbac:user:delete"), deleteUser)
-		users.POST("/:id/roles", middleware.RequirePermission("rbac:user:assign_role"), assignRoles)
-		users.DELETE("/:id/roles", middleware.RequirePermission("rbac:user:assign_role"), removeRoles)
-		users.POST("/change-password", changePassword)
-	}
 	// 忘记密码接口无需登录
 	users.POST("/forgot-password", forgotPassword)
 	// 发送验证码接口
 	users.POST("/send-reset-code", sendResetCode)
+
+	authUsers := r.Group("/users")
+	authUsers.Use(middleware.AuthMiddleware())
+	{
+		authUsers.GET("", middleware.RequirePermission("rbac:user:read"), getUsers)
+		authUsers.GET("/:id", middleware.RequirePermission("rbac:user:read"), getUser)
+		authUsers.POST("", middleware.RequirePermission("rbac:user:create"), createUser)
+		authUsers.PUT("/:id", middleware.RequirePermission("rbac:user:update"), updateUser)
+		authUsers.DELETE("/:id", middleware.RequirePermission("rbac:user:delete"), deleteUser)
+		authUsers.POST("/:id/roles", middleware.RequirePermission("rbac:user:assign_role"), assignRoles)
+		authUsers.DELETE("/:id/roles", middleware.RequirePermission("rbac:user:assign_role"), removeRoles)
+		authUsers.POST("/change-password", changePassword)
+	}
 }
 
 // getUsers 获取用户列表
