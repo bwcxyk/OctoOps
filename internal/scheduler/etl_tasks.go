@@ -3,7 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"log"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	seatunnelService "octoops/internal/service/seatunnel"
 	"time"
@@ -11,7 +11,7 @@ import (
 
 func loadActiveTasks() {
 	var tasks []seatunnelModel.EtlTask
-	if err := db.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks).Error; err != nil {
+	if err := postgres.DB.Where("task_type = ? AND status = ? AND cron_expr != ?", "batch", 1, "").Find(&tasks).Error; err != nil {
 		log.Printf("[Scheduler] failed to load tasks: %v", err)
 		return
 	}
@@ -84,7 +84,7 @@ func executeTask(task seatunnelModel.EtlTask) {
 	log.Printf("开始执行定时任务: ID=%d, 名称=%s", task.ID, task.Name)
 
 	now := time.Now()
-	db.DB.Model(&task).Update("last_run_time", now)
+	postgres.DB.Model(&task).Update("last_run_time", now)
 
 	respBody, err := seatunnelService.SubmitJobInternal(task.ID, false)
 	if err != nil {

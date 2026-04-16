@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -48,10 +49,23 @@ type AuthConfig struct {
 	JWTSecret string `yaml:"jwt_secret"`
 }
 
+type ServerConfig struct {
+	Port int `yaml:"port"`
+}
+
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+	Prefix   string `yaml:"prefix"`
+}
+
 type OctoopsConfig struct {
 	Mail   MailConfig   `yaml:"mail"`
 	Aliyun AliyunConfig `yaml:"aliyun"`
 	Auth   AuthConfig   `yaml:"auth"`
+	Server ServerConfig `yaml:"server"`
+	Redis  RedisConfig  `yaml:"redis"`
 	// 预留字段，后续可扩展
 }
 
@@ -67,6 +81,8 @@ var (
 	mailConfig       MailConfig
 	aliyunAesKey     string
 	jwtSecret        string
+	serverPort       int
+	redisConfig      RedisConfig
 )
 
 func overrideStringField(envVar string, field *string) {
@@ -93,16 +109,16 @@ func overrideBoolField(envVar string, field *bool) {
 	}
 }
 
-func InitConfig() {
+func InitConfig() error {
 	cfg := Config{}
 
 	if data, err := os.ReadFile("config.yaml"); err == nil {
-		fmt.Println("读取 config.yaml 配置文件")
+		log.Println("读取 config.yaml 配置文件")
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			log.Fatalf("解析 config.yaml 失败: %v", err)
+			return fmt.Errorf("解析 config.yaml 失败: %w", err)
 		}
 	} else {
-		log.Fatalf("读取 config.yaml 失败: %v", err)
+		return fmt.Errorf("读取 config.yaml 失败: %w", err)
 	}
 
 	// Postgres
@@ -131,13 +147,20 @@ func InitConfig() {
 
 	// Octoops.Auth
 	overrideStringField("OCTOOPS_AUTH_JWT_SECRET", &cfg.Octoops.Auth.JWTSecret)
+	// Octoops.Server
+	overrideIntField("OCTOOPS_SERVER_PORT", &cfg.Octoops.Server.Port)
+	// Octoops.Redis
+	overrideStringField("OCTOOPS_REDIS_ADDR", &cfg.Octoops.Redis.Addr)
+	overrideStringField("OCTOOPS_REDIS_PASSWORD", &cfg.Octoops.Redis.Password)
+	overrideIntField("OCTOOPS_REDIS_DB", &cfg.Octoops.Redis.DB)
+	overrideStringField("OCTOOPS_REDIS_PREFIX", &cfg.Octoops.Redis.Prefix)
 
 	// 校验必填项
 	if cfg.Seatunnel.BaseURL == "" {
-		log.Fatal("seatunnel.base_url 配置不能为空")
+		return errors.New("seatunnel.base_url 配置不能为空")
 	}
 	if cfg.Postgres.Host == "" || cfg.Postgres.User == "" || cfg.Postgres.Password == "" || cfg.Postgres.DBName == "" || cfg.Postgres.Port == 0 || cfg.Postgres.SSLMode == "" || cfg.Postgres.TimeZone == "" {
-		log.Fatal("postgres 配置不完整")
+		return errors.New("postgres 配置不完整")
 	}
 
 	SeatunnelBaseURL = cfg.Seatunnel.BaseURL
@@ -145,12 +168,21 @@ func InitConfig() {
 	mailConfig = cfg.Octoops.Mail
 	aliyunAesKey = cfg.Octoops.Aliyun.AesKey
 	jwtSecret = cfg.Octoops.Auth.JWTSecret
+	serverPort = cfg.Octoops.Server.Port
+	redisConfig = cfg.Octoops.Redis
+	if redisConfig.Prefix == "" {
+		redisConfig.Prefix = "octoops:"
+	}
+	if serverPort == 0 {
+		serverPort = 8080
+	}
 
 	// 设置JWT密钥
 	// Enforce a non-empty JWT secret.
 	if jwtSecret == "" {
-		log.Fatal("octoops.auth.jwt_secret is required")
+		return errors.New("octoops.auth.jwt_secret is required")
 	}
+	return nil
 }
 
 func GetMailConfig() MailConfig {
@@ -163,4 +195,12 @@ func GetAliyunAesKey() string {
 
 func GetJWTSecret() string {
 	return jwtSecret
+}
+
+func GetServerPort() int {
+	return serverPort
+}
+
+func GetRedisConfig() RedisConfig {
+	return redisConfig
 }

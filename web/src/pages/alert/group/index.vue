@@ -159,7 +159,7 @@ const pagedData = computed(() => {
 
 const availableChannels = computed(() => {
   if (!addMemberType.value) return [];
-  return channels.value.filter((item) => item.type === addMemberType.value);
+  return channels.value.filter((item) => item.type === addMemberType.value && item.status === 1);
 });
 
 const channelTypeLabel = (type: string) => {

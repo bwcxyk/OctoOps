@@ -1,17 +1,26 @@
 package main
 
 import (
+	"crypto/rand"
 	"log"
+	"math/big"
 	"octoops/internal/config"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/model/rbac"
 	"octoops/internal/utils"
 )
 
 func main() {
 	// 初始化配置和数据库
-	config.InitConfig()
-	db.Init()
+	if err := config.InitConfig(); err != nil {
+		log.Fatalf("初始化配置失败: %v", err)
+	}
+	if err := postgres.Init(config.PostgresDSN); err != nil {
+		log.Fatalf("初始化数据库失败: %v", err)
+	}
+	if err := postgres.Migrate(); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
 
 	log.Println("开始初始化RBAC系统...")
 
@@ -55,8 +64,8 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			ParentID:    0,
 		}
 		var existing model.Permission
-		if err := db.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
-			db.DB.Model(&existing).Updates(map[string]interface{}{
+		if err := postgres.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
+			postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        perm.Name,
 				"description": perm.Description,
 				"type":        perm.Type,
@@ -66,9 +75,9 @@ func createMenuLikePermissions() map[string]*model.Permission {
 				"status":      perm.Status,
 				"parent_id":   perm.ParentID,
 			})
-			db.DB.First(&perm, existing.ID)
+			postgres.DB.First(&perm, existing.ID)
 		} else {
-			db.DB.Create(&perm)
+			postgres.DB.Create(&perm)
 		}
 		menuMap[m.Code] = &perm
 	}
@@ -111,8 +120,8 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			ParentID:    menuMap[s.Parent].ID,
 		}
 		var existing model.Permission
-		if err := db.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
-			db.DB.Model(&existing).Updates(map[string]interface{}{
+		if err := postgres.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
+			postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        perm.Name,
 				"description": perm.Description,
 				"type":        perm.Type,
@@ -122,9 +131,9 @@ func createMenuLikePermissions() map[string]*model.Permission {
 				"status":      perm.Status,
 				"parent_id":   perm.ParentID,
 			})
-			db.DB.First(&perm, existing.ID)
+			postgres.DB.First(&perm, existing.ID)
 		} else {
-			db.DB.Create(&perm)
+			postgres.DB.Create(&perm)
 		}
 		subMenuMap[s.Code] = &perm
 	}
@@ -216,8 +225,8 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	for i := range permissions {
 		p := &permissions[i]
 		var existing model.Permission
-		if err := db.DB.Where("code = ?", p.Code).First(&existing).Error; err == nil {
-			if err := db.DB.Model(&existing).Updates(map[string]interface{}{
+		if err := postgres.DB.Where("code = ?", p.Code).First(&existing).Error; err == nil {
+			if err := postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        p.Name,
 				"description": p.Description,
 				"type":        p.Type,
@@ -229,12 +238,12 @@ func createMenuLikePermissions() map[string]*model.Permission {
 				log.Printf("更新权限 %s 失败: %v", p.Code, err)
 				continue
 			}
-			db.DB.First(&existing, existing.ID)
+			postgres.DB.First(&existing, existing.ID)
 			log.Printf("更新权限: %s", p.Code)
 			permissionMap[p.Code] = &existing
 			continue
 		}
-		if err := db.DB.Create(p).Error; err != nil {
+		if err := postgres.DB.Create(p).Error; err != nil {
 			log.Printf("创建权限 %s 失败: %v", p.Code, err)
 			continue
 		}
@@ -269,14 +278,14 @@ func createDefaultRoles(permissions map[string]*model.Permission) map[string]*mo
 	for _, r := range roles {
 		// 检查角色是否已存在
 		var existing model.Role
-		if err := db.DB.Where("name = ?", r.Name).First(&existing).Error; err == nil {
+		if err := postgres.DB.Where("name = ?", r.Name).First(&existing).Error; err == nil {
 			log.Printf("角色 %s 已存在，跳过创建", r.Name)
 			roleMap[r.Name] = &existing
 			continue
 		}
 
 		// 创建角色
-		if err := db.DB.Create(&r).Error; err != nil {
+		if err := postgres.DB.Create(&r).Error; err != nil {
 			log.Printf("创建角色 %s 失败: %v", r.Name, err)
 			continue
 		}
@@ -304,7 +313,7 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			})
 		}
 		if len(rolePermissions) > 0 {
-			db.DB.Create(&rolePermissions)
+			postgres.DB.Create(&rolePermissions)
 			log.Printf("为管理员分配了 %d 个权限", len(rolePermissions))
 		}
 	}
@@ -331,7 +340,7 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			}
 		}
 		if len(rolePermissions) > 0 {
-			db.DB.Create(&rolePermissions)
+			postgres.DB.Create(&rolePermissions)
 			log.Printf("为操作员分配了 %d 个权限", len(rolePermissions))
 		}
 	}
@@ -356,7 +365,7 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			}
 		}
 		if len(rolePermissions) > 0 {
-			db.DB.Create(&rolePermissions)
+			postgres.DB.Create(&rolePermissions)
 			log.Printf("为观察者分配了 %d 个权限", len(rolePermissions))
 		}
 	}
@@ -366,13 +375,19 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 func createDefaultAdmin(roles map[string]*model.Role) {
 	// 检查管理员用户是否已存在
 	var existingUser model.User
-	if err := db.DB.Where("username = ?", "admin").First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("username = ?", "admin").First(&existingUser).Error; err == nil {
 		log.Println("管理员用户已存在，跳过创建")
 		return
 	}
 
+	initialPassword, err := generateInitialAdminPassword(12)
+	if err != nil {
+		log.Printf("生成初始管理员密码失败: %v", err)
+		return
+	}
+
 	// 加密密码
-	hashedPassword, err := utils.HashPassword("admin123")
+	hashedPassword, err := utils.HashPassword(initialPassword)
 	if err != nil {
 		log.Printf("密码加密失败: %v", err)
 		return
@@ -388,13 +403,72 @@ func createDefaultAdmin(roles map[string]*model.Role) {
 		IsSuperAdmin: true,
 	}
 
-	if err := db.DB.Create(&admin).Error; err != nil {
+	if err := postgres.DB.Create(&admin).Error; err != nil {
 		log.Printf("创建管理员用户失败: %v", err)
 		return
 	}
 
 	log.Println("创建默认超级管理员用户成功！")
 	log.Println("用户名: admin")
-	log.Println("密码: admin123")
+	log.Printf("初始密码: %s", initialPassword)
 	log.Println("请及时修改默认密码！")
+}
+
+func generateInitialAdminPassword(length int) (string, error) {
+	if length < 8 {
+		length = 8
+	}
+
+	lower := []rune("abcdefghijklmnopqrstuvwxyz")
+	upper := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	digits := []rune("0123456789")
+	all := append(append([]rune{}, lower...), append(upper, digits...)...)
+
+	password := make([]rune, 0, length)
+
+	// Ensure at least 3 categories: lower, upper, digits.
+	firstThree, err := pickFromSets([][]rune{lower, upper, digits})
+	if err != nil {
+		return "", err
+	}
+	password = append(password, firstThree...)
+
+	for len(password) < length {
+		idx, err := secureRandInt(len(all))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, all[idx])
+	}
+
+	// Shuffle to avoid predictable prefix.
+	for i := len(password) - 1; i > 0; i-- {
+		j, err := secureRandInt(i + 1)
+		if err != nil {
+			return "", err
+		}
+		password[i], password[j] = password[j], password[i]
+	}
+
+	return string(password), nil
+}
+
+func pickFromSets(sets [][]rune) ([]rune, error) {
+	result := make([]rune, 0, len(sets))
+	for _, set := range sets {
+		idx, err := secureRandInt(len(set))
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, set[idx])
+	}
+	return result, nil
+}
+
+func secureRandInt(max int) (int, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64()), nil
 }

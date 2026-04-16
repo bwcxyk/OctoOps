@@ -1,9 +1,7 @@
-package db
+package postgres
 
 import (
 	"fmt"
-	"log"
-	"octoops/internal/config"
 	alertModel "octoops/internal/model/alert"
 	aliyunModel "octoops/internal/model/aliyun"
 	rbacModel "octoops/internal/model/rbac"
@@ -17,24 +15,28 @@ import (
 
 var DB *gorm.DB
 
-func Init() {
-	// 支持通过环境变量或 config 包配置数据库连接
-	dsn := config.PostgresDSN
+func Init(dsn string) error {
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Sprintf("failed to connect database: %v", err))
+		return fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	// Set connection pool parameters
 	sqlDB, err := DB.DB()
 	if err != nil {
-		panic(fmt.Sprintf("failed to get database connection: %v", err))
+		return fmt.Errorf("failed to get database connection: %w", err)
 	}
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
-	// Auto migrate models
+
+	return nil
+}
+
+func Migrate() error {
+	if DB == nil {
+		return fmt.Errorf("database is not initialized")
+	}
 	if err := DB.AutoMigrate(
 		&seatunnelModel.EtlTask{},
 		&aliyunModel.SGConfig{},
@@ -44,13 +46,13 @@ func Init() {
 		&alertModel.AlertTemplate{},
 		&taskModel.CustomTask{},
 		&taskModel.TaskLog{},
-		// RBAC相关模型
 		&rbacModel.User{},
 		&rbacModel.Role{},
 		&rbacModel.Permission{},
 		&rbacModel.UserRole{},
 		&rbacModel.RolePermission{},
 	); err != nil {
-		log.Fatalf("数据库自动迁移失败: %v", err)
+		return fmt.Errorf("数据库自动迁移失败: %w", err)
 	}
+	return nil
 }

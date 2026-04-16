@@ -1,7 +1,7 @@
 package seatunnel
 
 import (
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	seatunnelModel "octoops/internal/model/seatunnel"
 )
 
@@ -17,7 +17,7 @@ type TaskListFilter struct {
 
 func ListTasks(filter TaskListFilter) ([]seatunnelModel.EtlTask, int64, error) {
 	var tasks []seatunnelModel.EtlTask
-	query := db.DB
+	query := postgres.DB
 	if filter.TaskType != "" {
 		query = query.Where("task_type = ?", filter.TaskType)
 	}
@@ -48,19 +48,19 @@ func ListTasks(filter TaskListFilter) ([]seatunnelModel.EtlTask, int64, error) {
 }
 
 func CreateTask(task *seatunnelModel.EtlTask) error {
-	return db.DB.Create(task).Error
+	return postgres.DB.Create(task).Error
 }
 
 func GetTaskByID(id interface{}) (seatunnelModel.EtlTask, error) {
 	var task seatunnelModel.EtlTask
-	err := db.DB.First(&task, id).Error
+	err := postgres.DB.First(&task, id).Error
 	return task, err
 }
 
 func UpdateTask(task *seatunnelModel.EtlTask, updates map[string]interface{}) error {
-	return db.DB.Model(task).Updates(updates).Error
+	return postgres.DB.Model(task).Updates(updates).Error
 }
 
 func DeleteTask(task *seatunnelModel.EtlTask) error {
-	return db.DB.Delete(task).Error
+	return postgres.DB.Delete(task).Error
 }

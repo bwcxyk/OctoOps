@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"log"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	taskModel "octoops/internal/model/task"
 	aliyunService "octoops/internal/service/aliyun"
 	seatunnelService "octoops/internal/service/seatunnel"
@@ -49,12 +49,12 @@ func addCustomTaskToCron(task *CustomTask) {
 		}
 		mapsMu.Unlock()
 
-		db.DB.Model(&taskModel.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+		postgres.DB.Model(&taskModel.CustomTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
 			"last_run_time": task.LastRun,
 			"last_result":   task.LastResult,
 		})
 
-		db.DB.Create(&taskModel.TaskLog{
+		postgres.DB.Create(&taskModel.TaskLog{
 			TaskName: task.Name,
 			Result:   result,
 			Status:   "success",
@@ -68,9 +68,9 @@ func addCustomTaskToCron(task *CustomTask) {
 		task.NextRun = computeNextRunFromEntry(entry, time.Now())
 		mapsMu.Unlock()
 		nextRun := task.NextRun.Format("2006-01-02 15:04:05")
-		log.Printf("[Scheduler][Custom] added id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
+		log.Printf("[Scheduler][自定义任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
 	} else {
-		log.Printf("[Scheduler][Custom] add failed id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
+		log.Printf("[Scheduler][自定义任务] 添加失败 id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
 	}
 }
 
@@ -85,13 +85,13 @@ func DisableCustomTask(id uint) {
 	mapsMu.Unlock()
 	if ok && entryID != 0 {
 		cronScheduler.Remove(entryID)
-		db.DB.Model(&taskModel.CustomTask{}).Where("id = ?", id).Update("status", 0)
+		postgres.DB.Model(&taskModel.CustomTask{}).Where("id = ?", id).Update("status", 0)
 	}
 }
 
 func loadCustomTasksFromDB() {
 	var tasks []taskModel.CustomTask
-	db.DB.Find(&tasks)
+	postgres.DB.Find(&tasks)
 	log.Printf("[Scheduler] 数据库加载自定义任务数量: %d", len(tasks))
 	for _, t := range tasks {
 		RegisterCustomTask(

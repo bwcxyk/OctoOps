@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	taskModel "octoops/internal/model/task"
 	"octoops/internal/scheduler"
@@ -15,7 +15,7 @@ import (
 
 func ListCustomTasks(c *gin.Context) {
 	var tasks []taskModel.CustomTask
-	query := db.DB.Model(&taskModel.CustomTask{})
+	query := postgres.DB.Model(&taskModel.CustomTask{})
 	// 分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
@@ -41,7 +41,7 @@ func CreateCustomTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.DB.Create(&task)
+	postgres.DB.Create(&task)
 	scheduler.RegisterCustomTask(
 		task.ID,
 		task.Name,
@@ -56,7 +56,7 @@ func CreateCustomTask(c *gin.Context) {
 func UpdateCustomTask(c *gin.Context) {
 	id := c.Param("id")
 	var task taskModel.CustomTask
-	if err := db.DB.First(&task, id).Error; err != nil {
+	if err := postgres.DB.First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -65,7 +65,7 @@ func UpdateCustomTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	db.DB.Model(&task).Updates(req)
+	postgres.DB.Model(&task).Updates(req)
 	var uid uint
 	if _, err := fmt.Sscanf(id, "%d", &uid); err != nil {
 		log.Printf("id 解析失败: %v", err)
@@ -74,7 +74,7 @@ func UpdateCustomTask(c *gin.Context) {
 	}
 	scheduler.DisableCustomTask(uid)
 	var updatedTask taskModel.CustomTask
-	db.DB.First(&updatedTask, id)
+	postgres.DB.First(&updatedTask, id)
 	if updatedTask.Status == 1 {
 		scheduler.RegisterCustomTask(
 			updatedTask.ID,
@@ -96,7 +96,7 @@ func DeleteCustomTask(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "无效的ID"})
 		return
 	}
-	db.DB.Delete(&taskModel.CustomTask{}, id)
+	postgres.DB.Delete(&taskModel.CustomTask{}, id)
 	scheduler.DisableCustomTask(uid)
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }

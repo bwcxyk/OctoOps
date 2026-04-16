@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"log"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	aliyunModel "octoops/internal/model/aliyun"
 	"octoops/internal/utils"
 
@@ -223,7 +223,7 @@ func GetSecurityGroupDetailString(client *ecs.Client, cfg *aliyunModel.SGConfig)
 // 批量同步所有ECS安全组配置
 func SyncAllECSSecurityGroups() error {
 	var configs []aliyunModel.SGConfig
-	dbIns := db.DB
+	dbIns := postgres.DB
 	dbIns.Where("status != 0").Find(&configs)
 	var failed []string
 	for _, cfg := range configs {

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/model/rbac"
 
 	"github.com/gin-gonic/gin"
@@ -158,7 +158,7 @@ func HasPermission(user *model.User, permissionCode string) bool {
 
 	// 重新加载用户的角色和权限信息
 	var userWithRoles model.User
-	if err := db.DB.Preload("Roles.Permissions").First(&userWithRoles, user.ID).Error; err != nil {
+	if err := postgres.DB.Preload("Roles.Permissions").First(&userWithRoles, user.ID).Error; err != nil {
 		return false
 	}
 
@@ -190,7 +190,7 @@ func GetUserPermissions(user *model.User) []string {
 	// 超级管理员返回所有权限
 	if user.IsSuperAdmin {
 		var allPermissions []model.Permission
-		if err := db.DB.Where("status = ?", 1).Find(&allPermissions).Error; err == nil {
+		if err := postgres.DB.Where("status = ?", 1).Find(&allPermissions).Error; err == nil {
 			permissions := make([]string, 0, len(allPermissions))
 			for _, p := range allPermissions {
 				permissions = append(permissions, p.Code)
@@ -202,7 +202,7 @@ func GetUserPermissions(user *model.User) []string {
 	var permissions []string
 	var userWithRoles model.User
 
-	if err := db.DB.Preload("Roles.Permissions").First(&userWithRoles, user.ID).Error; err != nil {
+	if err := postgres.DB.Preload("Roles.Permissions").First(&userWithRoles, user.ID).Error; err != nil {
 		return permissions
 	}
 

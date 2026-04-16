@@ -9,6 +9,8 @@ import (
 	"io"
 	"octoops/internal/config"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -106,4 +108,51 @@ func HashPassword(password string) (string, error) {
 func VerifyPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+// ValidatePasswordComplexity validates password strength:
+// at least 8 characters and at least 3 of these 4 categories:
+// lowercase letters, uppercase letters, digits, special characters.
+func ValidatePasswordComplexity(password string) error {
+	if utf8.RuneCountInString(password) < 8 {
+		return errors.New("密码长度至少为8位")
+	}
+
+	hasLower := false
+	hasUpper := false
+	hasDigit := false
+	hasSpecial := false
+
+	for _, r := range password {
+		switch {
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+
+	categories := 0
+	if hasLower {
+		categories++
+	}
+	if hasUpper {
+		categories++
+	}
+	if hasDigit {
+		categories++
+	}
+	if hasSpecial {
+		categories++
+	}
+
+	if categories < 3 {
+		return errors.New("密码需包含数字、大写字母、小写字母、特殊字符中的至少三种")
+	}
+
+	return nil
 }

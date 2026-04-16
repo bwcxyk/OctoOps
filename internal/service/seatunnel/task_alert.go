@@ -2,7 +2,7 @@ package seatunnel
 
 import (
 	"log"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	alertModel "octoops/internal/model/alert"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	alertService "octoops/internal/service/alert"
@@ -17,16 +17,16 @@ func SendTaskAlert(task seatunnelModel.EtlTask, status string) {
 	groupIDs := strings.Split(task.AlertGroup, ",")
 	for _, gid := range groupIDs {
 		var members []alertModel.AlertGroupMember
-		db.DB.Where("group_id = ?", gid).Find(&members)
+		postgres.DB.Where("group_id = ?", gid).Find(&members)
 		for _, m := range members {
 			var alert alertModel.AlertChannel
-			db.DB.First(&alert, m.ChannelID)
+			postgres.DB.First(&alert, m.ChannelID)
 			if alert.Status != 1 {
 				continue
 			}
 			var tpl alertModel.AlertTemplate
 			if alert.TemplateID != 0 {
-				db.DB.First(&tpl, alert.TemplateID)
+				postgres.DB.First(&tpl, alert.TemplateID)
 			}
 			data := map[string]interface{}{
 				"JobID":     task.JobID,

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	alertApi "octoops/internal/api/alert"
@@ -11,7 +12,8 @@ import (
 	seatunnelApi "octoops/internal/api/seatunnel"
 	taskApi "octoops/internal/api/task"
 	"octoops/internal/config"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
+	infraRedis "octoops/internal/infra/redis"
 	"octoops/internal/pkg/jwt"
 	"octoops/internal/scheduler"
 	"os"
@@ -27,10 +29,21 @@ func main() {
 	// 设置Gin框架为生产模式
 	gin.SetMode(gin.ReleaseMode)
 	// 初始化应用配置、数据库连接、定时任务和邮件服务
-	config.InitConfig()                     // 初始化配置
-	jwt.SetJWTSecret(config.GetJWTSecret()) // 初始化JWT密钥
-	db.Init()                               // 初始化数据库
-	scheduler.InitScheduler()               // 初始化定时任务
+	if err := config.InitConfig(); err != nil { // 初始化配置
+		log.Fatalf("初始化配置失败: %v", err)
+	}
+	jwt.SetJWTSecret(config.GetJWTSecret())                   // 初始化JWT密钥
+	if err := postgres.Init(config.PostgresDSN); err != nil { // 初始化数据库
+		log.Fatalf("初始化数据库失败: %v", err)
+	}
+	if err := postgres.Migrate(); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+	redisCfg := config.GetRedisConfig()
+	if err := infraRedis.Init(redisCfg); err != nil {
+		log.Fatalf("初始化Redis失败: %v", err)
+	}
+	scheduler.InitScheduler() // 初始化定时任务
 
 	// 初始化 Gin 引擎
 	r := gin.New()
@@ -83,13 +96,14 @@ func main() {
 	})
 
 	// 优雅启动和关闭
+	serverAddr := fmt.Sprintf(":%d", config.GetServerPort())
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    serverAddr,
 		Handler: r,
 	}
 
 	go func() {
-		log.Println("服务启动于 :8080")
+		log.Printf("服务启动于 %s", serverAddr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("listen: %s\n", err)
 		}
