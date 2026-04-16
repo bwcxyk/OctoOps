@@ -141,7 +141,6 @@ octoops/
 ## 相关文档
 
 - 前端说明：`web/README.md`
-- 前端发布流程：`web/PUBLISH.md`
 
 ## 贡献
 
