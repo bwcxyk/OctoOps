@@ -54,7 +54,6 @@ type ServerConfig struct {
 }
 
 type RedisConfig struct {
-	Enable   bool   `yaml:"enable"`
 	Addr     string `yaml:"addr"`
 	Password string `yaml:"password"`
 	DB       int    `yaml:"db"`
@@ -151,7 +150,6 @@ func InitConfig() error {
 	// Octoops.Server
 	overrideIntField("OCTOOPS_SERVER_PORT", &cfg.Octoops.Server.Port)
 	// Octoops.Redis
-	overrideBoolField("OCTOOPS_REDIS_ENABLE", &cfg.Octoops.Redis.Enable)
 	overrideStringField("OCTOOPS_REDIS_ADDR", &cfg.Octoops.Redis.Addr)
 	overrideStringField("OCTOOPS_REDIS_PASSWORD", &cfg.Octoops.Redis.Password)
 	overrideIntField("OCTOOPS_REDIS_DB", &cfg.Octoops.Redis.DB)

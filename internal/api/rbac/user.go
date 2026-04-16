@@ -5,7 +5,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
 	"octoops/internal/utils"
@@ -114,7 +114,7 @@ func getUsers(c *gin.Context) {
 		pageSize = maxPageSize
 	}
 
-	query := db.DB.Model(&model.User{}).Preload("Roles").Where("is_super_admin = ?", false)
+	query := postgres.DB.Model(&model.User{}).Preload("Roles").Where("is_super_admin = ?", false)
 
 	// 添加查询条件
 	if username != "" {
@@ -173,7 +173,7 @@ func getUser(c *gin.Context) {
 	}
 
 	var user model.User
-	if err := db.DB.Preload("Roles").First(&user, id).Error; err != nil {
+	if err := postgres.DB.Preload("Roles").First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -209,7 +209,7 @@ func createUser(c *gin.Context) {
 
 	// 检查用户名是否已存在
 	var existingUser model.User
-	if err := db.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "用户名已存在",
@@ -218,7 +218,7 @@ func createUser(c *gin.Context) {
 	}
 
 	// 检查邮箱是否已存在
-	if err := db.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "邮箱已存在",
@@ -245,7 +245,7 @@ func createUser(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 创建用户
 	user := model.User{
@@ -322,7 +322,7 @@ func updateUser(c *gin.Context) {
 
 	// 检查用户是否存在
 	var user model.User
-	if err := db.DB.First(&user, id).Error; err != nil {
+	if err := postgres.DB.First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -338,7 +338,7 @@ func updateUser(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 更新用户信息
 	updates := make(map[string]interface{})
@@ -407,7 +407,7 @@ func updateUser(c *gin.Context) {
 	}
 
 	// 重新加载用户信息
-	db.DB.Preload("Roles").First(&user, user.ID)
+	postgres.DB.Preload("Roles").First(&user, user.ID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -428,7 +428,7 @@ func deleteUser(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 删除用户角色关联
 	if err := tx.Where("user_id = ?", id).Delete(&model.UserRole{}).Error; err != nil {
@@ -488,7 +488,7 @@ func assignRoles(c *gin.Context) {
 
 	// 检查用户是否存在
 	var user model.User
-	if err := db.DB.First(&user, id).Error; err != nil {
+	if err := postgres.DB.First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    404,
 			"message": "用户不存在",
@@ -514,7 +514,7 @@ func assignRoles(c *gin.Context) {
 		return
 	}
 
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 只插入缺失的角色关联，实现幂等
 	var existingUserRoles []model.UserRole
@@ -591,7 +591,7 @@ func removeRoles(c *gin.Context) {
 	}
 
 	// 移除角色
-	if err := db.DB.Where("user_id = ? AND role_id IN ?", id, req.RoleIDs).Delete(&model.UserRole{}).Error; err != nil {
+	if err := postgres.DB.Where("user_id = ? AND role_id IN ?", id, req.RoleIDs).Delete(&model.UserRole{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "移除角色失败",
@@ -653,7 +653,7 @@ func changePassword(c *gin.Context) {
 	}
 
 	// 更新密码
-	if err := db.DB.Model(&user).Update("password", hashedPassword).Error; err != nil {
+	if err := postgres.DB.Model(&user).Update("password", hashedPassword).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "修改密码失败",
@@ -674,11 +674,16 @@ func sendResetCode(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请求参数错误", "error": err.Error()})
 		return
 	}
+	store, err := GetRecoveryStore()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "账号恢复服务未配置"})
+		return
+	}
 	email := normalizeEmail(req.Email)
 	now := time.Now()
 	rateKey := buildResetRateKey(email, c.ClientIP())
 
-	if !allowSendResetCode(rateKey, now) {
+	if !allowSendResetCode(store, rateKey, now) {
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"code":    429,
 			"message": "请求过于频繁，请稍后再试",
@@ -687,7 +692,7 @@ func sendResetCode(c *gin.Context) {
 	}
 
 	var user model.User
-	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := postgres.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		// 防枚举：统一响应，不暴露邮箱是否存在。
 		c.JSON(http.StatusOK, gin.H{"code": 200, "message": "如邮箱已注册，验证码已发送"})
 		return
@@ -703,7 +708,7 @@ func sendResetCode(c *gin.Context) {
 		code += strconv.FormatInt(n.Int64(), 10)
 	}
 	// 存储验证码，5分钟有效
-	if err := passwordResetStore.SetCode(email, resetCodeEntry{
+	if err := store.SetCode(email, resetCodeEntry{
 		Code:           code,
 		ExpiresAt:      now.Add(resetCodeTTL),
 		VerifyAttempts: 0,
@@ -739,9 +744,14 @@ func forgotPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "请求参数错误", "error": err.Error()})
 		return
 	}
+	store, err := GetRecoveryStore()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "账号恢复服务未配置"})
+		return
+	}
 	email := normalizeEmail(req.Email)
 	// 校验验证码
-	entry, ok, err := passwordResetStore.GetCode(email)
+	entry, ok, err := store.GetCode(email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
 		return
@@ -753,12 +763,12 @@ func forgotPassword(c *gin.Context) {
 	if entry.Code != req.Code {
 		entry.VerifyAttempts++
 		if entry.VerifyAttempts >= resetCodeMaxAttempts {
-			if err := passwordResetStore.DeleteCode(email); err != nil {
+			if err := store.DeleteCode(email); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
 				return
 			}
 		} else {
-			if err := passwordResetStore.SetCode(email, entry); err != nil {
+			if err := store.SetCode(email, entry); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
 				return
 			}
@@ -767,12 +777,12 @@ func forgotPassword(c *gin.Context) {
 		return
 	}
 	// 验证通过后删除验证码
-	if err := passwordResetStore.DeleteCode(email); err != nil {
+	if err := store.DeleteCode(email); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "验证码校验失败"})
 		return
 	}
 	var user model.User
-	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := postgres.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "验证码错误或已过期"})
 		return
 	}
@@ -785,7 +795,7 @@ func forgotPassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "密码加密失败"})
 		return
 	}
-	if err := db.DB.Model(&user).Update("password", hashedPassword).Error; err != nil {
+	if err := postgres.DB.Model(&user).Update("password", hashedPassword).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "重置密码失败"})
 		return
 	}
@@ -800,13 +810,13 @@ func buildResetRateKey(email, ip string) string {
 	return email + "|" + ip
 }
 
-func allowSendResetCode(key string, now time.Time) bool {
-	entry, exists, err := passwordResetStore.GetRate(key)
+func allowSendResetCode(store RecoveryStore, key string, now time.Time) bool {
+	entry, exists, err := store.GetRate(key)
 	if err != nil {
 		return false
 	}
 	if !exists || now.Sub(entry.WindowStart) >= resetCodeSendWindow {
-		err := passwordResetStore.SetRate(key, resetRateEntry{
+		err := store.SetRate(key, resetRateEntry{
 			WindowStart: now,
 			SendCount:   1,
 			LastSentAt:  now,
@@ -823,5 +833,5 @@ func allowSendResetCode(key string, now time.Time) bool {
 
 	entry.SendCount++
 	entry.LastSentAt = now
-	return passwordResetStore.SetRate(key, entry) == nil
+	return store.SetRate(key, entry) == nil
 }

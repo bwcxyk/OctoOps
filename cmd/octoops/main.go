@@ -12,7 +12,8 @@ import (
 	seatunnelApi "octoops/internal/api/seatunnel"
 	taskApi "octoops/internal/api/task"
 	"octoops/internal/config"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
+	infraRedis "octoops/internal/infra/redis"
 	"octoops/internal/pkg/jwt"
 	"octoops/internal/scheduler"
 	"os"
@@ -31,12 +32,16 @@ func main() {
 	if err := config.InitConfig(); err != nil { // 初始化配置
 		log.Fatalf("初始化配置失败: %v", err)
 	}
-	jwt.SetJWTSecret(config.GetJWTSecret()) // 初始化JWT密钥
-	if err := db.Init(); err != nil {       // 初始化数据库
+	jwt.SetJWTSecret(config.GetJWTSecret())                   // 初始化JWT密钥
+	if err := postgres.Init(config.PostgresDSN); err != nil { // 初始化数据库
 		log.Fatalf("初始化数据库失败: %v", err)
 	}
-	if err := rbacApi.InitPasswordResetStore(); err != nil {
-		log.Fatalf("初始化密码重置存储失败: %v", err)
+	if err := postgres.Migrate(); err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+	redisCfg := config.GetRedisConfig()
+	if err := infraRedis.Init(redisCfg); err != nil {
+		log.Fatalf("初始化Redis失败: %v", err)
 	}
 	scheduler.InitScheduler() // 初始化定时任务
 

@@ -7,53 +7,45 @@ import (
 	"time"
 
 	"octoops/internal/config"
+	infraRedis "octoops/internal/infra/redis"
 
 	redis "github.com/redis/go-redis/v9"
 )
 
-type redisPasswordResetStore struct {
+// RecoveryStore is a storage abstraction for account-recovery code and rate data.
+type RecoveryStore interface {
+	GetCode(email string) (resetCodeEntry, bool, error)
+	SetCode(email string, entry resetCodeEntry) error
+	DeleteCode(email string) error
+
+	GetRate(key string) (resetRateEntry, bool, error)
+	SetRate(key string, entry resetRateEntry) error
+}
+
+func GetRecoveryStore() (RecoveryStore, error) {
+	return NewRedisRecoveryStore(infraRedis.Client(), config.GetRedisConfig().Prefix)
+}
+
+type redisRecoveryStore struct {
 	client *redis.Client
 	prefix string
 }
 
-func NewRedisPasswordResetStore(addr, password string, db int, prefix string) (PasswordResetStore, error) {
-	if addr == "" {
-		return nil, fmt.Errorf("redis addr is required")
+func NewRedisRecoveryStore(client *redis.Client, prefix string) (RecoveryStore, error) {
+	if client == nil {
+		return nil, fmt.Errorf("redis client is nil")
 	}
 	if prefix == "" {
 		prefix = "octoops:"
 	}
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
-	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping failed: %w", err)
-	}
-
-	return &redisPasswordResetStore{
+	return &redisRecoveryStore{
 		client: client,
 		prefix: prefix,
 	}, nil
 }
 
-func InitPasswordResetStore() error {
-	redisCfg := config.GetRedisConfig()
-	if !redisCfg.Enable {
-		return nil
-	}
-	store, err := NewRedisPasswordResetStore(redisCfg.Addr, redisCfg.Password, redisCfg.DB, redisCfg.Prefix)
-	if err != nil {
-		return err
-	}
-	return SetPasswordResetStore(store)
-}
-
-func (s *redisPasswordResetStore) GetCode(email string) (resetCodeEntry, bool, error) {
+func (s *redisRecoveryStore) GetCode(email string) (resetCodeEntry, bool, error) {
 	key := s.codeKey(email)
 	ctx := context.Background()
 	val, err := s.client.Get(ctx, key).Result()
@@ -70,7 +62,7 @@ func (s *redisPasswordResetStore) GetCode(email string) (resetCodeEntry, bool, e
 	return entry, true, nil
 }
 
-func (s *redisPasswordResetStore) SetCode(email string, entry resetCodeEntry) error {
+func (s *redisRecoveryStore) SetCode(email string, entry resetCodeEntry) error {
 	key := s.codeKey(email)
 	ctx := context.Background()
 	payload, err := json.Marshal(entry)
@@ -84,12 +76,12 @@ func (s *redisPasswordResetStore) SetCode(email string, entry resetCodeEntry) er
 	return s.client.Set(ctx, key, payload, ttl).Err()
 }
 
-func (s *redisPasswordResetStore) DeleteCode(email string) error {
+func (s *redisRecoveryStore) DeleteCode(email string) error {
 	key := s.codeKey(email)
 	return s.client.Del(context.Background(), key).Err()
 }
 
-func (s *redisPasswordResetStore) GetRate(key string) (resetRateEntry, bool, error) {
+func (s *redisRecoveryStore) GetRate(key string) (resetRateEntry, bool, error) {
 	redisKey := s.rateKey(key)
 	ctx := context.Background()
 	val, err := s.client.Get(ctx, redisKey).Result()
@@ -106,7 +98,7 @@ func (s *redisPasswordResetStore) GetRate(key string) (resetRateEntry, bool, err
 	return entry, true, nil
 }
 
-func (s *redisPasswordResetStore) SetRate(key string, entry resetRateEntry) error {
+func (s *redisRecoveryStore) SetRate(key string, entry resetRateEntry) error {
 	redisKey := s.rateKey(key)
 	ctx := context.Background()
 	payload, err := json.Marshal(entry)
@@ -120,10 +112,10 @@ func (s *redisPasswordResetStore) SetRate(key string, entry resetRateEntry) erro
 	return s.client.Set(ctx, redisKey, payload, ttl).Err()
 }
 
-func (s *redisPasswordResetStore) codeKey(email string) string {
+func (s *redisRecoveryStore) codeKey(email string) string {
 	return s.prefix + "reset:code:" + email
 }
 
-func (s *redisPasswordResetStore) rateKey(key string) string {
+func (s *redisRecoveryStore) rateKey(key string) string {
 	return s.prefix + "reset:rate:" + key
 }
