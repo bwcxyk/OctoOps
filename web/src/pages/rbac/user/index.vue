@@ -76,6 +76,7 @@ import { onMounted, reactive, ref } from 'vue';
 
 import type { RoleItem, UserItem } from '@/api/model/rbacModel';
 import { createUserApi, deleteUserApi, getRolesApi, getUsersApi, updateUserApi } from '@/api/rbac';
+import { validatePasswordComplexity } from '@/utils/password';
 
 defineOptions({
   name: 'RbacUserManage',
@@ -105,7 +106,13 @@ const rules: Record<string, FormRule[]> = {
     { required: true, message: '请输入用户名', type: 'error' },
     { pattern: /^[a-z0-9]+$/i, message: '用户名只能包含数字或英文字母', type: 'warning' },
   ],
-  password: [{ required: true, message: '请输入密码', type: 'error' }],
+  password: [
+    { required: true, message: '请输入密码', type: 'error' },
+    {
+      validator: (val) => validatePasswordComplexity(String(val ?? '')),
+      type: 'error',
+    },
+  ],
   email: [
     { required: true, message: '请输入邮箱', type: 'error' },
     { email: true, message: '邮箱格式不正确', type: 'warning' },
