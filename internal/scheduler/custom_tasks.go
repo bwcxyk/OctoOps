@@ -68,9 +68,9 @@ func addCustomTaskToCron(task *CustomTask) {
 		task.NextRun = computeNextRunFromEntry(entry, time.Now())
 		mapsMu.Unlock()
 		nextRun := task.NextRun.Format("2006-01-02 15:04:05")
-		log.Printf("[Scheduler][Custom] added id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
+		log.Printf("[Scheduler][自定义任务] 添加成功 id=%d, name=%s, cron=%s, nextRun=%s", task.ID, task.Name, task.Spec, nextRun)
 	} else {
-		log.Printf("[Scheduler][Custom] add failed id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
+		log.Printf("[Scheduler][自定义任务] 添加失败 id=%d, name=%s, cron=%s, err=%v", task.ID, task.Name, task.Spec, err)
 	}
 }
 

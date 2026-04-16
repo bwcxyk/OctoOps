@@ -3,6 +3,14 @@
 
 # OctoOps 平台相关配置
 octoops:
+  server:
+    port: 8080 # 后端服务监听端口
+  redis:
+    enable: false # 是否启用 Redis（用于密码找回验证码与限流存储）
+    addr: "127.0.0.1:6379" # Redis 地址
+    password: "" # Redis 密码
+    db: 0 # Redis DB
+    prefix: "octoops:" # Redis key 前缀
   aliyun:
     aes_key: "12345678901234567890123456789012" # AES加密密钥，32字节（AES-256）
   auth:

@@ -9,7 +9,7 @@
 ## 功能概览
 
 - 任务中心：调度器、自定义任务、任务日志
-- 数据集成：SeaTunnel（流式 / 离线）
+- 数据集成：基于 SeaTunnel 实现流批一体的数据同步与作业编排，通过 [REST API V2](https://seatunnel.incubator.apache.org/docs/engines/zeta/rest-api-v2) 对接执行能力
 - 云资源：阿里云相关能力
 - 告警体系：告警渠道、告警组、告警模板
 - 权限体系：用户、角色、权限（RBAC）
@@ -37,7 +37,7 @@ docker exec -it octoops /app/octoops-init
 初始化后会创建默认管理员：
 
 - 用户名：`admin`
-- 密码：`admin123`
+- 密码：随机生成（执行 `octoops-init` 时输出在日志中）
 
 首次登录后请立即修改密码。
 
@@ -69,7 +69,13 @@ cp config.yaml.example config.yaml
 go run ./cmd/octoops/main.go
 ```
 
-后端默认监听 `8080` 端口。
+后端默认监听 `8080` 端口（可通过 `config.yaml` 的 `octoops.server.port` 修改）。
+
+3. 运行后端单元测试：
+
+```bash
+go test ./... -v
+```
 
 ### 前端开发
 
@@ -91,6 +97,8 @@ npm run dev
 - `postgres`：数据库连接信息
 - `octoops.auth.jwt_secret`：JWT 密钥
 - `octoops.mail`：SMTP 邮件告警配置
+- `octoops.server.port`：后端服务监听端口
+- `octoops.redis`：可选 Redis 配置（密码找回验证码与限流存储）
 - `seatunnel.base_url`：SeaTunnel API 地址
 - `octoops.aliyun.aes_key`：阿里云密钥加密用 AES Key（32 字节）
 
@@ -126,7 +134,8 @@ octoops/
 
 4. 如何更改服务端口？
 
-- 当前端口在 `cmd/octoops/main.go` 中固定为 `:8080`，修改后重新构建/启动即可。
+- 在 `config.yaml` 中设置 `octoops.server.port`，重启服务生效。
+- 也可通过环境变量 `OCTOOPS_SERVER_PORT` 覆盖配置值。
 
 ## 相关文档
 

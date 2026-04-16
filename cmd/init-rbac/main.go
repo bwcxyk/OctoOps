@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"log"
+	"math/big"
 	"octoops/internal/config"
 	"octoops/internal/db"
 	"octoops/internal/model/rbac"
@@ -10,8 +12,12 @@ import (
 
 func main() {
 	// 初始化配置和数据库
-	config.InitConfig()
-	db.Init()
+	if err := config.InitConfig(); err != nil {
+		log.Fatalf("初始化配置失败: %v", err)
+	}
+	if err := db.Init(); err != nil {
+		log.Fatalf("初始化数据库失败: %v", err)
+	}
 
 	log.Println("开始初始化RBAC系统...")
 
@@ -371,8 +377,14 @@ func createDefaultAdmin(roles map[string]*model.Role) {
 		return
 	}
 
+	initialPassword, err := generateInitialAdminPassword(12)
+	if err != nil {
+		log.Printf("生成初始管理员密码失败: %v", err)
+		return
+	}
+
 	// 加密密码
-	hashedPassword, err := utils.HashPassword("admin123")
+	hashedPassword, err := utils.HashPassword(initialPassword)
 	if err != nil {
 		log.Printf("密码加密失败: %v", err)
 		return
@@ -395,6 +407,65 @@ func createDefaultAdmin(roles map[string]*model.Role) {
 
 	log.Println("创建默认超级管理员用户成功！")
 	log.Println("用户名: admin")
-	log.Println("密码: admin123")
+	log.Printf("初始密码: %s", initialPassword)
 	log.Println("请及时修改默认密码！")
+}
+
+func generateInitialAdminPassword(length int) (string, error) {
+	if length < 8 {
+		length = 8
+	}
+
+	lower := []rune("abcdefghijklmnopqrstuvwxyz")
+	upper := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	digits := []rune("0123456789")
+	all := append(append([]rune{}, lower...), append(upper, digits...)...)
+
+	password := make([]rune, 0, length)
+
+	// Ensure at least 3 categories: lower, upper, digits.
+	firstThree, err := pickFromSets([][]rune{lower, upper, digits})
+	if err != nil {
+		return "", err
+	}
+	password = append(password, firstThree...)
+
+	for len(password) < length {
+		idx, err := secureRandInt(len(all))
+		if err != nil {
+			return "", err
+		}
+		password = append(password, all[idx])
+	}
+
+	// Shuffle to avoid predictable prefix.
+	for i := len(password) - 1; i > 0; i-- {
+		j, err := secureRandInt(i + 1)
+		if err != nil {
+			return "", err
+		}
+		password[i], password[j] = password[j], password[i]
+	}
+
+	return string(password), nil
+}
+
+func pickFromSets(sets [][]rune) ([]rune, error) {
+	result := make([]rune, 0, len(sets))
+	for _, set := range sets {
+		idx, err := secureRandInt(len(set))
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, set[idx])
+	}
+	return result, nil
+}
+
+func secureRandInt(max int) (int, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64()), nil
 }

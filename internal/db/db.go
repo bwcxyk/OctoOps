@@ -2,7 +2,6 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"octoops/internal/config"
 	alertModel "octoops/internal/model/alert"
 	aliyunModel "octoops/internal/model/aliyun"
@@ -17,19 +16,19 @@ import (
 
 var DB *gorm.DB
 
-func Init() {
+func Init() error {
 	// 支持通过环境变量或 config 包配置数据库连接
 	dsn := config.PostgresDSN
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Sprintf("failed to connect database: %v", err))
+		return fmt.Errorf("failed to connect database: %w", err)
 	}
 
 	// Set connection pool parameters
 	sqlDB, err := DB.DB()
 	if err != nil {
-		panic(fmt.Sprintf("failed to get database connection: %v", err))
+		return fmt.Errorf("failed to get database connection: %w", err)
 	}
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
@@ -51,6 +50,7 @@ func Init() {
 		&rbacModel.UserRole{},
 		&rbacModel.RolePermission{},
 	); err != nil {
-		log.Fatalf("数据库自动迁移失败: %v", err)
+		return fmt.Errorf("数据库自动迁移失败: %w", err)
 	}
+	return nil
 }
