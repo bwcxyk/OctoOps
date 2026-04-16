@@ -3,7 +3,7 @@ package alert
 import (
 	"errors"
 	"fmt"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	alertModel "octoops/internal/model/alert"
 
 	"gorm.io/gorm"
@@ -13,17 +13,17 @@ var ErrAlertGroupMemberExists = errors.New("告警组成员已存在")
 
 func ListChannels() ([]alertModel.AlertChannel, error) {
 	var channels []alertModel.AlertChannel
-	err := db.DB.Order("created_at desc").Find(&channels).Error
+	err := postgres.DB.Order("created_at desc").Find(&channels).Error
 	return channels, err
 }
 
 func CreateChannel(channel *alertModel.AlertChannel) error {
-	return db.DB.Create(channel).Error
+	return postgres.DB.Create(channel).Error
 }
 
 func GetChannelByID(id string) (alertModel.AlertChannel, error) {
 	var channel alertModel.AlertChannel
-	err := db.DB.First(&channel, id).Error
+	err := postgres.DB.First(&channel, id).Error
 	return channel, err
 }
 
@@ -32,29 +32,29 @@ func UpdateChannel(id string, updates map[string]interface{}) (alertModel.AlertC
 	if err != nil {
 		return alertModel.AlertChannel{}, err
 	}
-	if err := db.DB.Model(&channel).Updates(updates).Error; err != nil {
+	if err := postgres.DB.Model(&channel).Updates(updates).Error; err != nil {
 		return alertModel.AlertChannel{}, err
 	}
 	return channel, nil
 }
 
 func DeleteChannel(id string) error {
-	return db.DB.Delete(&alertModel.AlertChannel{}, id).Error
+	return postgres.DB.Delete(&alertModel.AlertChannel{}, id).Error
 }
 
 func ListAlertGroups() ([]alertModel.AlertGroup, error) {
 	var groups []alertModel.AlertGroup
-	err := db.DB.Order("created_at desc").Find(&groups).Error
+	err := postgres.DB.Order("created_at desc").Find(&groups).Error
 	return groups, err
 }
 
 func CreateAlertGroup(group *alertModel.AlertGroup) error {
-	return db.DB.Create(group).Error
+	return postgres.DB.Create(group).Error
 }
 
 func GetAlertGroupByID(id string) (alertModel.AlertGroup, error) {
 	var group alertModel.AlertGroup
-	err := db.DB.First(&group, id).Error
+	err := postgres.DB.First(&group, id).Error
 	return group, err
 }
 
@@ -68,19 +68,19 @@ func UpdateAlertGroup(id string, req alertModel.AlertGroup) (alertModel.AlertGro
 		"description": req.Description,
 		"status":      req.Status,
 	}
-	if err := db.DB.Model(&group).Updates(updates).Error; err != nil {
+	if err := postgres.DB.Model(&group).Updates(updates).Error; err != nil {
 		return alertModel.AlertGroup{}, err
 	}
 	return group, nil
 }
 
 func DeleteAlertGroup(id string) error {
-	return db.DB.Delete(&alertModel.AlertGroup{}, id).Error
+	return postgres.DB.Delete(&alertModel.AlertGroup{}, id).Error
 }
 
 func ListAlertGroupMembers(groupID string) ([]alertModel.AlertGroupMember, error) {
 	var members []alertModel.AlertGroupMember
-	err := db.DB.Where("group_id = ?", groupID).Find(&members).Error
+	err := postgres.DB.Where("group_id = ?", groupID).Find(&members).Error
 	return members, err
 }
 
@@ -88,7 +88,7 @@ func CreateAlertGroupMember(groupID uint, member *alertModel.AlertGroupMember) e
 	member.GroupID = groupID
 
 	var existing alertModel.AlertGroupMember
-	if err := db.DB.Where(
+	if err := postgres.DB.Where(
 		"group_id = ? AND channel_type = ? AND channel_id = ?",
 		member.GroupID,
 		member.ChannelType,
@@ -100,7 +100,7 @@ func CreateAlertGroupMember(groupID uint, member *alertModel.AlertGroupMember) e
 	} else {
 		return ErrAlertGroupMemberExists
 	}
-	if err := db.DB.Create(member).Error; err != nil {
+	if err := postgres.DB.Create(member).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return ErrAlertGroupMemberExists
 		}
@@ -110,22 +110,22 @@ func CreateAlertGroupMember(groupID uint, member *alertModel.AlertGroupMember) e
 }
 
 func DeleteAlertGroupMember(memberID string) error {
-	return db.DB.Delete(&alertModel.AlertGroupMember{}, memberID).Error
+	return postgres.DB.Delete(&alertModel.AlertGroupMember{}, memberID).Error
 }
 
 func ListAlertTemplates() ([]alertModel.AlertTemplate, error) {
 	var templates []alertModel.AlertTemplate
-	err := db.DB.Order("created_at desc").Find(&templates).Error
+	err := postgres.DB.Order("created_at desc").Find(&templates).Error
 	return templates, err
 }
 
 func CreateAlertTemplate(tpl *alertModel.AlertTemplate) error {
-	return db.DB.Create(tpl).Error
+	return postgres.DB.Create(tpl).Error
 }
 
 func GetAlertTemplateByID(id string) (alertModel.AlertTemplate, error) {
 	var tpl alertModel.AlertTemplate
-	err := db.DB.First(&tpl, id).Error
+	err := postgres.DB.First(&tpl, id).Error
 	return tpl, err
 }
 
@@ -138,14 +138,14 @@ func UpdateAlertTemplate(id string, req alertModel.AlertTemplate) (alertModel.Al
 		"name":    req.Name,
 		"content": req.Content,
 	}
-	if err := db.DB.Model(&tpl).Updates(updates).Error; err != nil {
+	if err := postgres.DB.Model(&tpl).Updates(updates).Error; err != nil {
 		return alertModel.AlertTemplate{}, err
 	}
 	return tpl, nil
 }
 
 func DeleteAlertTemplate(id string) error {
-	return db.DB.Delete(&alertModel.AlertTemplate{}, id).Error
+	return postgres.DB.Delete(&alertModel.AlertTemplate{}, id).Error
 }
 
 func ParseUint(s string) (uint, error) {

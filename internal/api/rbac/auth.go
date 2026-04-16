@@ -2,7 +2,7 @@ package rbac
 
 import (
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
 	"octoops/internal/pkg/jwt"
@@ -71,7 +71,7 @@ func login(c *gin.Context) {
 
 	// 查询用户
 	var user model.User
-	if err := db.DB.Preload("Roles").Where("username = ?", req.Username).First(&user).Error; err != nil {
+	if err := postgres.DB.Preload("Roles").Where("username = ?", req.Username).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    401,
@@ -159,7 +159,7 @@ func register(c *gin.Context) {
 
 	// 检查用户名是否已存在
 	var existingUser model.User
-	if err := db.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "用户名已存在",
@@ -168,7 +168,7 @@ func register(c *gin.Context) {
 	}
 
 	// 检查邮箱是否已存在
-	if err := db.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "邮箱已存在",
@@ -203,7 +203,7 @@ func register(c *gin.Context) {
 		Status:   1,
 	}
 
-	if err := db.DB.Create(&user).Error; err != nil {
+	if err := postgres.DB.Create(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "创建用户失败",
@@ -238,7 +238,7 @@ func getProfile(c *gin.Context) {
 	}
 
 	// 重新加载用户信息
-	if err := db.DB.Preload("Roles").First(user, user.ID).Error; err != nil {
+	if err := postgres.DB.Preload("Roles").First(user, user.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取用户信息失败",

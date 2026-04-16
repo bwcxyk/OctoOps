@@ -2,7 +2,7 @@ package rbac
 
 import (
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
 	"strconv"
@@ -58,7 +58,7 @@ func getPermissions(c *gin.Context) {
 	type_ := c.Query("type")
 	status := c.Query("status")
 
-	query := db.DB.Model(&model.Permission{})
+	query := postgres.DB.Model(&model.Permission{})
 
 	// 添加查询条件
 	if name != "" {
@@ -114,7 +114,7 @@ func getPermission(c *gin.Context) {
 	}
 
 	var permission model.Permission
-	if err := db.DB.First(&permission, id).Error; err != nil {
+	if err := postgres.DB.First(&permission, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -150,7 +150,7 @@ func createPermission(c *gin.Context) {
 
 	// 检查权限代码是否已存在
 	var existingPermission model.Permission
-	if err := db.DB.Where("code = ?", req.Code).First(&existingPermission).Error; err == nil {
+	if err := postgres.DB.Where("code = ?", req.Code).First(&existingPermission).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "权限代码已存在",
@@ -169,7 +169,7 @@ func createPermission(c *gin.Context) {
 		Status:      1,
 	}
 
-	if err := db.DB.Create(&permission).Error; err != nil {
+	if err := postgres.DB.Create(&permission).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "创建权限失败",
@@ -207,7 +207,7 @@ func updatePermission(c *gin.Context) {
 
 	// 检查权限是否存在
 	var permission model.Permission
-	if err := db.DB.First(&permission, id).Error; err != nil {
+	if err := postgres.DB.First(&permission, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -225,7 +225,7 @@ func updatePermission(c *gin.Context) {
 	// 如果更新了权限代码，检查是否与其他权限冲突
 	if req.Code != "" && req.Code != permission.Code {
 		var existingPermission model.Permission
-		if err := db.DB.Where("code = ? AND id != ?", req.Code, id).First(&existingPermission).Error; err == nil {
+		if err := postgres.DB.Where("code = ? AND id != ?", req.Code, id).First(&existingPermission).Error; err == nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":    400,
 				"message": "权限代码已存在",
@@ -259,7 +259,7 @@ func updatePermission(c *gin.Context) {
 	}
 
 	if len(updates) > 0 {
-		if err := db.DB.Model(&permission).Updates(updates).Error; err != nil {
+		if err := postgres.DB.Model(&permission).Updates(updates).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"code":    500,
 				"message": "更新权限信息失败",
@@ -269,7 +269,7 @@ func updatePermission(c *gin.Context) {
 	}
 
 	// 重新加载权限信息
-	db.DB.First(&permission, permission.ID)
+	postgres.DB.First(&permission, permission.ID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -290,7 +290,7 @@ func deletePermission(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 删除角色权限关联
 	if err := tx.Where("permission_id = ?", id).Delete(&model.RolePermission{}).Error; err != nil {
@@ -336,7 +336,7 @@ type PermissionTreeNode struct {
 // getPermissionTree 获取权限树（基于 parent_id 递归）
 func getPermissionTree(c *gin.Context) {
 	var permissions []model.Permission
-	if err := db.DB.Where("status = 1").Find(&permissions).Error; err != nil {
+	if err := postgres.DB.Where("status = 1").Find(&permissions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "获取权限列表失败",
@@ -392,7 +392,7 @@ func getUserMenus(c *gin.Context) {
 	// 超级管理员返回所有菜单
 	if userModel.IsSuperAdmin {
 		var menus []model.Permission
-		db.DB.Where("type = ? AND status = 1", "menu").Order("order_num ASC, id ASC").Find(&menus)
+		postgres.DB.Where("type = ? AND status = 1", "menu").Order("order_num ASC, id ASC").Find(&menus)
 		menuTree := buildMenuTreeForSuperAdmin(menus, 0)
 		c.JSON(200, gin.H{"code": 200, "data": menuTree})
 		return
@@ -400,7 +400,7 @@ func getUserMenus(c *gin.Context) {
 
 	// 查询用户所有权限
 	var roles []model.Role
-	db.DB.Model(userModel).Preload("Permissions").Association("Roles").Find(&roles)
+	postgres.DB.Model(userModel).Preload("Permissions").Association("Roles").Find(&roles)
 	permMap := make(map[string]bool)
 	for _, role := range roles {
 		for _, p := range role.Permissions {
@@ -410,7 +410,7 @@ func getUserMenus(c *gin.Context) {
 
 	// 查询所有菜单权限
 	var menus []model.Permission
-	db.DB.Where("type = ? AND status = 1", "menu").Order("order_num ASC, id ASC").Find(&menus)
+	postgres.DB.Where("type = ? AND status = 1", "menu").Order("order_num ASC, id ASC").Find(&menus)
 
 	menuTree := buildMenuTree(menus, 0, permMap)
 	c.JSON(200, gin.H{"code": 200, "data": menuTree})

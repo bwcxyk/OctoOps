@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"octoops/internal/config"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	taskModel "octoops/internal/model/task"
 	"strconv"
@@ -20,7 +20,7 @@ import (
 // SubmitJobInternal 内部提交作业方法
 func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 	var task seatunnelModel.EtlTask
-	if err := db.DB.First(&task, taskID).Error; err != nil {
+	if err := postgres.DB.First(&task, taskID).Error; err != nil {
 		return nil, fmt.Errorf("任务不存在: %v", err)
 	}
 
@@ -89,7 +89,7 @@ func UpdateJobIdFromResponse(taskID uint, octoopsRespBody []byte) {
 	}
 
 	if jobID != "" {
-		if err := db.DB.Model(&seatunnelModel.EtlTask{}).Where("id = ?", taskID).Update("job_id", jobID).Error; err != nil {
+		if err := postgres.DB.Model(&seatunnelModel.EtlTask{}).Where("id = ?", taskID).Update("job_id", jobID).Error; err != nil {
 			log.Printf("[ERROR] 更新 jobId 失败: taskID=%d, jobId=%s, error=%v", taskID, jobID, err)
 		} else {
 			log.Printf("[INFO] jobId 更新成功: taskID=%d, jobId=%s", taskID, jobID)
@@ -118,7 +118,7 @@ func WriteTaskLogWithStatus(task seatunnelModel.EtlTask, octoopsRespBody []byte,
 	if v, ok := resultMap["jobName"].(string); ok {
 		taskName = v
 	}
-	db.DB.Create(&taskModel.TaskLog{
+	postgres.DB.Create(&taskModel.TaskLog{
 		TaskName: taskName,
 		Result:   string(octoopsRespBody),
 		Status:   status,

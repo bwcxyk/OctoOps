@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	taskModel "octoops/internal/model/task"
 
@@ -16,7 +16,7 @@ const maxPageSize = 100
 // 获取任务日志
 func ListTaskLogs(c *gin.Context) {
 	var logs []taskModel.TaskLog
-	query := db.DB
+	query := postgres.DB
 	if taskName := c.Query("task_name"); taskName != "" {
 		query = query.Where("task_name LIKE ?", "%"+taskName+"%")
 	}

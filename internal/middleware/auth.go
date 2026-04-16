@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/model/rbac"
 	"octoops/internal/pkg/jwt"
 	"strings"
@@ -51,7 +51,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// 验证用户是否存在且状态正常
 		var user model.User
-		if err := db.DB.Preload("Roles").First(&user, claims.UID).Error; err != nil {
+		if err := postgres.DB.Preload("Roles").First(&user, claims.UID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"code":    401,

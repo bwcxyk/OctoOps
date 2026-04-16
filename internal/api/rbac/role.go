@@ -2,7 +2,7 @@ package rbac
 
 import (
 	"net/http"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
 	"strconv"
@@ -48,7 +48,7 @@ func getRoles(c *gin.Context) {
 	name := c.Query("name")
 	status := c.Query("status")
 
-	query := db.DB.Model(&model.Role{}).Preload("Permissions")
+	query := postgres.DB.Model(&model.Role{}).Preload("Permissions")
 
 	// 添加查询条件
 	if name != "" {
@@ -98,7 +98,7 @@ func getRole(c *gin.Context) {
 	}
 
 	var role model.Role
-	if err := db.DB.Preload("Permissions").First(&role, id).Error; err != nil {
+	if err := postgres.DB.Preload("Permissions").First(&role, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -134,7 +134,7 @@ func createRole(c *gin.Context) {
 
 	// 检查角色名是否已存在
 	var existingRole model.Role
-	if err := db.DB.Where("name = ?", req.Name).First(&existingRole).Error; err == nil {
+	if err := postgres.DB.Where("name = ?", req.Name).First(&existingRole).Error; err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "角色名已存在",
@@ -143,7 +143,7 @@ func createRole(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 创建角色
 	role := model.Role{
@@ -183,7 +183,7 @@ func createRole(c *gin.Context) {
 	tx.Commit()
 
 	// 重新加载角色信息
-	db.DB.Preload("Permissions").First(&role, role.ID)
+	postgres.DB.Preload("Permissions").First(&role, role.ID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -215,7 +215,7 @@ func updateRole(c *gin.Context) {
 
 	// 检查角色是否存在
 	var role model.Role
-	if err := db.DB.First(&role, id).Error; err != nil {
+	if err := postgres.DB.First(&role, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{
 				"code":    404,
@@ -231,7 +231,7 @@ func updateRole(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 更新角色信息
 	updates := make(map[string]interface{})
@@ -291,7 +291,7 @@ func updateRole(c *gin.Context) {
 	tx.Commit()
 
 	// 重新加载角色信息
-	db.DB.Preload("Permissions").First(&role, role.ID)
+	postgres.DB.Preload("Permissions").First(&role, role.ID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
@@ -312,7 +312,7 @@ func deleteRole(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := db.DB.Begin()
+	tx := postgres.DB.Begin()
 
 	// 删除角色权限关联
 	if err := tx.Where("role_id = ?", id).Delete(&model.RolePermission{}).Error; err != nil {
@@ -376,7 +376,7 @@ func assignPermissions(c *gin.Context) {
 
 	// 检查角色是否存在
 	var role model.Role
-	if err := db.DB.First(&role, id).Error; err != nil {
+	if err := postgres.DB.First(&role, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    404,
 			"message": "角色不存在",
@@ -393,7 +393,7 @@ func assignPermissions(c *gin.Context) {
 		})
 	}
 
-	if err := db.DB.Create(&rolePermissions).Error; err != nil {
+	if err := postgres.DB.Create(&rolePermissions).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "分配权限失败",
@@ -430,7 +430,7 @@ func removePermissions(c *gin.Context) {
 	}
 
 	// 移除权限
-	if err := db.DB.Where("role_id = ? AND permission_id IN ?", id, req.PermissionIDs).Delete(&model.RolePermission{}).Error; err != nil {
+	if err := postgres.DB.Where("role_id = ? AND permission_id IN ?", id, req.PermissionIDs).Delete(&model.RolePermission{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
 			"message": "移除权限失败",

@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 	"octoops/internal/config"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	seatunnelModel "octoops/internal/model/seatunnel"
 	seatunnel "octoops/internal/service/seatunnel"
@@ -64,7 +64,7 @@ func SubmitJob(c *gin.Context) {
 
 	// 检查任务状态，stream 类型运行中不允许重复提交
 	var task seatunnelModel.EtlTask
-	if err := db.DB.First(&task, taskID).Error; err != nil {
+	if err := postgres.DB.First(&task, taskID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
@@ -95,7 +95,7 @@ func SubmitJob(c *gin.Context) {
 	}
 
 	// 更新最后运行时间
-	db.DB.Model(&task).Update("last_run_time", time.Now())
+	postgres.DB.Model(&task).Update("last_run_time", time.Now())
 
 	// 从响应中提取 jobId 并更新到数据库
 	seatunnel.UpdateJobIdFromResponse(taskID, respBody)
@@ -121,7 +121,7 @@ func StopJob(c *gin.Context) {
 		return
 	}
 	var task seatunnelModel.EtlTask
-	if err := db.DB.First(&task, id).Error; err != nil {
+	if err := postgres.DB.First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}

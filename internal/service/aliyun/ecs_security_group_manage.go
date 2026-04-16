@@ -3,7 +3,7 @@ package aliyun
 import (
 	"encoding/base64"
 	"fmt"
-	"octoops/internal/db"
+	"octoops/internal/infra/postgres"
 	aliyunModel "octoops/internal/model/aliyun"
 	"octoops/internal/utils"
 	"strings"
@@ -13,7 +13,7 @@ import (
 
 func ListEcsSecurityGroupConfigs(status, accessKey, name string) ([]aliyunModel.SGConfig, error) {
 	var configs []aliyunModel.SGConfig
-	query := db.DB.Order("created_at desc")
+	query := postgres.DB.Order("created_at desc")
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -33,12 +33,12 @@ func CreateEcsSecurityGroupConfig(cfg *aliyunModel.SGConfig) error {
 		return fmt.Errorf("SK加密失败: %v", err)
 	}
 	cfg.AccessSecret = sk
-	return db.DB.Create(cfg).Error
+	return postgres.DB.Create(cfg).Error
 }
 
 func GetEcsSecurityGroupConfigByID(id string) (aliyunModel.SGConfig, error) {
 	var cfg aliyunModel.SGConfig
-	err := db.DB.First(&cfg, id).Error
+	err := postgres.DB.First(&cfg, id).Error
 	return cfg, err
 }
 
@@ -57,14 +57,14 @@ func UpdateEcsSecurityGroupConfig(id string, req map[string]interface{}) (aliyun
 			req["access_secret"] = encrypted
 		}
 	}
-	if err := db.DB.Model(&cfg).Updates(req).Error; err != nil {
+	if err := postgres.DB.Model(&cfg).Updates(req).Error; err != nil {
 		return aliyunModel.SGConfig{}, err
 	}
 	return cfg, nil
 }
 
 func DeleteEcsSecurityGroupConfig(id string) error {
-	return db.DB.Delete(&aliyunModel.SGConfig{}, id).Error
+	return postgres.DB.Delete(&aliyunModel.SGConfig{}, id).Error
 }
 
 func SyncEcsSecurityGroupConfigByID(id string) error {
@@ -72,7 +72,7 @@ func SyncEcsSecurityGroupConfigByID(id string) error {
 	if err != nil {
 		return err
 	}
-	dbIns := db.DB.Session(&gorm.Session{})
+	dbIns := postgres.DB.Session(&gorm.Session{})
 	dbIns = dbIns.Model(&aliyunModel.SGConfig{}).Where("id = ?", cfg.ID)
 	err = UpdateSecurityGroupIfIPChanged(dbIns)
 	if err != nil {
