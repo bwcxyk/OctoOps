@@ -103,6 +103,7 @@ import { useLocale } from '@/locales/useLocale';
 import { getActive } from '@/router';
 import { useSettingStore, useUserStore } from '@/store';
 import type { MenuRoute, ModeType } from '@/types/interface';
+import { validatePasswordComplexity } from '@/utils/password';
 
 import MenuContent from './MenuContent.vue';
 import Notice from './Notice.vue';
@@ -152,7 +153,13 @@ const changePasswordForm = reactive({
 });
 const CHANGE_PASSWORD_RULES: Record<string, FormRule[]> = {
   old_password: [{ required: true, message: '请输入原密码', type: 'error' }],
-  new_password: [{ required: true, message: '请输入新密码', type: 'error' }],
+  new_password: [
+    { required: true, message: '请输入新密码', type: 'error' },
+    {
+      validator: (val) => validatePasswordComplexity(String(val ?? '')),
+      type: 'error',
+    },
+  ],
   confirm_password: [{ required: true, message: '请确认新密码', type: 'error' }],
 };
 
