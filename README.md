@@ -53,6 +53,7 @@ docker exec -it octoops /app/octoops-init
 - Go（建议 1.24+）
 - Node.js（建议 20+）
 - PostgreSQL
+- Redis
 - 可选：SeaTunnel、SMTP 服务、Docker
 
 ### 后端开发
@@ -98,7 +99,7 @@ npm run dev
 - `octoops.auth.jwt_secret`：JWT 密钥
 - `octoops.mail`：SMTP 邮件告警配置
 - `octoops.server.port`：后端服务监听端口
-- `octoops.redis`：可选 Redis 配置（密码找回验证码与限流存储）
+- `octoops.redis`：Redis 配置（必需，用于密码找回验证码与限流存储）
 - `seatunnel.base_url`：SeaTunnel API 地址
 - `octoops.aliyun.aes_key`：阿里云密钥加密用 AES Key（32 字节）
 
