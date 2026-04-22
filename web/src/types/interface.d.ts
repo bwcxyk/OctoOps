@@ -13,6 +13,7 @@ export interface RouteMeta {
   keepAlive?: boolean;
   frameSrc?: string;
   frameBlank?: boolean;
+  activeMenu?: string;
 }
 
 export interface MenuRoute {

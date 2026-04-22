@@ -33,6 +33,15 @@ export function getTasksApi(params: TaskListQuery) {
   );
 }
 
+export function getTaskApi(id: number, taskType: 'stream' | 'batch') {
+  return request.get<SeatunnelTask>(
+    {
+      url: `${resolveTasksApiByType(taskType)}/${id}`,
+    },
+    { isTransformResponse: false },
+  );
+}
+
 export function createTaskApi(data: Partial<SeatunnelTask>) {
   return request.post<SeatunnelTask>(
     {

@@ -176,6 +176,7 @@ func SyncJobStatus(c *gin.Context) {
 
 func RegisterStreamTaskRoutes(r *gin.RouterGroup) {
 	r.GET("/seatunnel/stream", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:read"), ListStreamTasks)
+	r.GET("/seatunnel/stream/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:read"), GetStreamTask)
 	r.POST("/seatunnel/stream", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:create"), CreateStreamTask)
 	r.PUT("/seatunnel/stream/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:update"), UpdateStreamTaskWithScheduler)
 	r.DELETE("/seatunnel/stream/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:stream:delete"), DeleteStreamTask)

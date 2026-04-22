@@ -66,6 +66,11 @@ export const getRoutesExpanded = () => {
 export const getActive = (maxLevel = 3): string => {
   // 非组件内调用必须通过Router实例获取当前路由
   const route = router.currentRoute.value;
+  const activeMenu = route.meta?.activeMenu as string | undefined;
+
+  if (activeMenu) {
+    return activeMenu;
+  }
 
   if (!route.path) {
     return '';

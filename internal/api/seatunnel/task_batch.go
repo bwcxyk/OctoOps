@@ -8,6 +8,7 @@ import (
 
 func RegisterBatchTaskRoutes(r *gin.RouterGroup) {
 	r.GET("/seatunnel/batch", middleware.AuthMiddleware(), middleware.RequirePermission("etl:batch:read"), ListBatchTasks)
+	r.GET("/seatunnel/batch/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:batch:read"), GetBatchTask)
 	r.POST("/seatunnel/batch", middleware.AuthMiddleware(), middleware.RequirePermission("etl:batch:create"), CreateBatchTask)
 	r.PUT("/seatunnel/batch/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:batch:update"), UpdateBatchTaskWithScheduler)
 	r.DELETE("/seatunnel/batch/:id", middleware.AuthMiddleware(), middleware.RequirePermission("etl:batch:delete"), DeleteBatchTask)
