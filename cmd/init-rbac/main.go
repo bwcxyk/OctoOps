@@ -149,7 +149,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{Name: "同步", Code: "aliyun:ecs_sg:sync", Description: "同步ECS安全组", Type: "api", Path: "/api/aliyun/ecs-sg/:id/sync", Method: "POST", Status: 1, ParentID: subMenuMap["aliyun:ecs_sg"].ID},
 		// Seatunnel
 		// stream权限
-		{Name: "查看", Code: "etl:stream:read", Description: "查看实时数据集成", Type: "api", Path: "/api/seatunnel/stream", Method: "GET", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
+		{Name: "查看", Code: "etl:stream:read", Description: "查看实时数据集成列表/详情", Type: "api", Path: "/api/seatunnel/stream", Method: "GET", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
 		{Name: "创建", Code: "etl:stream:create", Description: "创建实时数据集成", Type: "api", Path: "/api/seatunnel/stream", Method: "POST", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
 		{Name: "更新", Code: "etl:stream:update", Description: "更新实时数据集成", Type: "api", Path: "/api/seatunnel/stream/:id", Method: "PUT", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
 		{Name: "删除", Code: "etl:stream:delete", Description: "删除实时数据集成", Type: "api", Path: "/api/seatunnel/stream/:id", Method: "DELETE", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
@@ -157,7 +157,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{Name: "停止作业", Code: "etl:stream:stop", Description: "停止实时数据集成作业", Type: "api", Path: "/api/seatunnel/tasks/:id/stop", Method: "POST", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
 		{Name: "同步状态", Code: "etl:stream:sync_status", Description: "同步实时数据集成作业状态", Type: "api", Path: "/api/seatunnel/tasks/sync-status", Method: "POST", Status: 1, ParentID: subMenuMap["etl:stream"].ID},
 		// batch权限
-		{Name: "查看", Code: "etl:batch:read", Description: "查看离线数据集成", Type: "api", Path: "/api/seatunnel/batch", Method: "GET", Status: 1, ParentID: subMenuMap["etl:batch"].ID},
+		{Name: "查看", Code: "etl:batch:read", Description: "查看离线数据集成列表/详情", Type: "api", Path: "/api/seatunnel/batch", Method: "GET", Status: 1, ParentID: subMenuMap["etl:batch"].ID},
 		{Name: "创建", Code: "etl:batch:create", Description: "创建离线数据集成", Type: "api", Path: "/api/seatunnel/batch", Method: "POST", Status: 1, ParentID: subMenuMap["etl:batch"].ID},
 		{Name: "更新", Code: "etl:batch:update", Description: "更新离线数据集成", Type: "api", Path: "/api/seatunnel/batch/:id", Method: "PUT", Status: 1, ParentID: subMenuMap["etl:batch"].ID},
 		{Name: "删除", Code: "etl:batch:delete", Description: "删除离线数据集成", Type: "api", Path: "/api/seatunnel/batch/:id", Method: "DELETE", Status: 1, ParentID: subMenuMap["etl:batch"].ID},

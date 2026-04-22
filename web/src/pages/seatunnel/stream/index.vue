@@ -25,7 +25,7 @@
 
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-button @click="openEditDialog()">新增</t-button>
+          <t-button @click="goCreatePage">新增</t-button>
           <t-button theme="success" :loading="syncing" @click="onSyncStatus">同步作业状态</t-button>
         </div>
       </t-row>
@@ -46,7 +46,7 @@
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="openEditDialog(row)">编辑</t-link>
+            <t-link theme="primary" @click="goEditPage(row)">编辑</t-link>
             <t-popconfirm content="确定要删除该任务吗？" @confirm="onDelete(row.id)">
               <t-link theme="danger">删除</t-link>
             </t-popconfirm>
@@ -69,40 +69,6 @@
         />
       </div>
     </t-card>
-
-    <t-dialog
-      v-model:visible="editDialogVisible"
-      :header="editForm.id ? '编辑流任务' : '新增流任务'"
-      width="900px"
-      :confirm-btn="{ content: '保存', theme: 'primary', loading: submitLoading }"
-      @confirm="onSubmit"
-    >
-      <t-form ref="formRef" :data="editForm" :rules="rules" label-width="110px" @submit="onFormSubmit">
-        <t-form-item label="作业名称" name="name">
-          <t-input v-model="editForm.name" />
-        </t-form-item>
-        <t-form-item label="描述" name="description">
-          <t-input v-model="editForm.description" />
-        </t-form-item>
-        <t-form-item label="配置风格" name="config_format">
-          <t-select v-model="editForm.config_format" style="width: 180px">
-            <t-option label="JSON" value="json" />
-            <t-option label="HOCON" value="hocon" />
-          </t-select>
-        </t-form-item>
-        <t-form-item label="失败告警" name="enable_alert">
-          <t-checkbox v-model="editForm.enable_alert" @change="onEnableAlertChange">作业失败时发送告警</t-checkbox>
-        </t-form-item>
-        <t-form-item v-if="editForm.enable_alert" label="告警组" name="alert_group_ids">
-          <t-select v-model="editForm.alert_group_ids" multiple clearable placeholder="请选择告警组">
-            <t-option v-for="group in alertGroups" :key="group.id" :label="group.name" :value="group.id" />
-          </t-select>
-        </t-form-item>
-        <t-form-item label="作业配置" name="config">
-          <t-textarea v-model="editForm.config" :autosize="{ minRows: 10, maxRows: 16 }" />
-        </t-form-item>
-      </t-form>
-    </t-dialog>
 
     <t-dialog
       v-model:visible="submitDialogVisible"
@@ -133,55 +99,51 @@
     </t-dialog>
 
     <t-dialog v-model:visible="detailDialogVisible" header="任务详情" width="720px" :footer="false">
-      <t-descriptions :column="1" bordered>
-        <t-descriptions-item label="作业ID">
-          <t-tooltip v-if="detailTask.job_id" :content="detailTask.job_id">
-            <span>{{ formatJobId(detailTask.job_id) }}</span>
-          </t-tooltip>
-          <span v-else>-</span>
-        </t-descriptions-item>
-        <t-descriptions-item label="作业名称">{{ detailTask.name }}</t-descriptions-item>
-        <t-descriptions-item label="描述">{{ detailTask.description || '-' }}</t-descriptions-item>
-        <t-descriptions-item label="作业状态">{{ jobStatusText(detailTask.job_status) }}</t-descriptions-item>
-        <t-descriptions-item label="任务类型">{{ detailTask.task_type }}</t-descriptions-item>
-        <t-descriptions-item label="创建时间">{{ formatDateTime(detailTask.created_at) }}</t-descriptions-item>
-        <t-descriptions-item label="更新时间">{{ formatDateTime(detailTask.updated_at) }}</t-descriptions-item>
-        <t-descriptions-item label="作业配置">
-          <t-textarea :model-value="detailTask.config || ''" readonly :autosize="{ minRows: 10, maxRows: 14 }" />
-        </t-descriptions-item>
-      </t-descriptions>
+      <div class="dialog-scroll-body">
+        <t-descriptions :column="1" bordered>
+          <t-descriptions-item label="作业ID">
+            <t-tooltip v-if="detailTask.job_id" :content="detailTask.job_id">
+              <span>{{ formatJobId(detailTask.job_id) }}</span>
+            </t-tooltip>
+            <span v-else>-</span>
+          </t-descriptions-item>
+          <t-descriptions-item label="作业名称">{{ detailTask.name }}</t-descriptions-item>
+          <t-descriptions-item label="描述">{{ detailTask.description || '-' }}</t-descriptions-item>
+          <t-descriptions-item label="作业状态">{{ jobStatusText(detailTask.job_status) }}</t-descriptions-item>
+          <t-descriptions-item label="任务类型">{{ detailTask.task_type }}</t-descriptions-item>
+          <t-descriptions-item label="创建时间">{{ formatDateTime(detailTask.created_at) }}</t-descriptions-item>
+          <t-descriptions-item label="更新时间">{{ formatDateTime(detailTask.updated_at) }}</t-descriptions-item>
+          <t-descriptions-item label="作业配置">
+            <CodeEditor
+              :model-value="detailTask.config || ''"
+              :active="detailDialogVisible"
+              :language="detailConfigLanguage"
+              :height="220"
+              readonly
+            />
+          </t-descriptions-item>
+        </t-descriptions>
+      </div>
     </t-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import type { FormRule, PrimaryTableCol, SubmitContext, TableRowData } from 'tdesign-vue-next';
+import type { PrimaryTableCol, TableRowData } from 'tdesign-vue-next';
 import { MessagePlugin } from 'tdesign-vue-next';
-import { nextTick, onMounted, reactive, ref } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
-import { getAlertGroupsApi } from '@/api/alert';
-import type { AlertGroup } from '@/api/model/alertModel';
 import type { SeatunnelTask } from '@/api/model/seatunnelModel';
 import {
-  createTaskApi,
   deleteTaskApi,
   getTasksApi,
   stopJobApi,
   submitJobApi,
   syncJobStatusApi,
-  updateTaskApi,
 } from '@/api/seatunnel';
+import CodeEditor from '@/components/code-editor/index.vue';
 
 defineOptions({ name: 'SeatunnelStreamTask' });
-
-interface StreamEditForm {
-  id?: number;
-  name: string;
-  description: string;
-  config_format: 'json' | 'hocon';
-  config: string;
-  enable_alert: boolean;
-  alert_group_ids: number[];
-}
 
 const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '序号', colKey: 'index', width: 80 },
@@ -192,23 +154,7 @@ const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '操作', colKey: 'op', width: 240 },
 ];
 
-const rules: Record<string, FormRule[]> = {
-  name: [{ required: true, message: '请输入作业名称', type: 'error' }],
-  config: [{ required: true, message: '请输入作业配置', type: 'error' }],
-  alert_group_ids: [
-    {
-      required: true,
-      validator: () => {
-        if (!editForm.enable_alert) return true;
-        return editForm.alert_group_ids.length > 0 ? true : { result: false, message: '请至少选择一个告警组' };
-      },
-      type: 'error',
-    },
-  ],
-};
-
 const loading = ref(false);
-const submitLoading = ref(false);
 const actionLoading = ref(false);
 const syncing = ref(false);
 
@@ -216,7 +162,7 @@ const tasks = ref<SeatunnelTask[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
-const alertGroups = ref<AlertGroup[]>([]);
+const router = useRouter();
 
 const searchForm = reactive({
   job_id: '',
@@ -224,34 +170,16 @@ const searchForm = reactive({
   job_status: '',
 });
 
-const editDialogVisible = ref(false);
 const submitDialogVisible = ref(false);
 const stopDialogVisible = ref(false);
 const detailDialogVisible = ref(false);
-const formRef = ref();
-
-const editForm = reactive<StreamEditForm>({
-  id: undefined,
-  name: '',
-  description: '',
-  config_format: 'json',
-  config: '',
-  enable_alert: false,
-  alert_group_ids: [],
-});
 
 const currentTask = ref<SeatunnelTask | null>(null);
 const detailTask = ref<Partial<SeatunnelTask>>({});
+const detailConfigLanguage = computed(() => ((detailTask.value.config_format as 'json' | 'hocon') || 'json'));
 const isStartWithSavePoint = ref(false);
 const isStopWithSavePoint = ref(false);
-
-function parseAlertGroupIds(alertGroup?: string) {
-  if (!alertGroup) return [];
-  return alertGroup
-    .split(',')
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isFinite(item) && item > 0);
-}
+let skipFirstActivated = true;
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -328,16 +256,6 @@ async function fetchTasks() {
   }
 }
 
-async function fetchAlertGroups() {
-  try {
-    const groups = await getAlertGroupsApi();
-    alertGroups.value = groups.filter((group) => group.status === 1);
-  } catch (error) {
-    console.error(error);
-    MessagePlugin.error('获取告警组失败');
-  }
-}
-
 function onSearch() {
   page.value = 1;
   fetchTasks();
@@ -362,41 +280,6 @@ function onPageSizeChange(size: number) {
   fetchTasks();
 }
 
-function resetEditForm() {
-  editForm.id = undefined;
-  editForm.name = '';
-  editForm.description = '';
-  editForm.config_format = 'json';
-  editForm.config = '';
-  editForm.enable_alert = false;
-  editForm.alert_group_ids = [];
-}
-
-function openEditDialog(row?: SeatunnelTask) {
-  if (row) {
-    editForm.id = row.id;
-    editForm.name = row.name || '';
-    editForm.description = row.description || '';
-    editForm.config_format = (row.config_format as 'json' | 'hocon') || 'json';
-    editForm.config = row.config || '';
-    editForm.alert_group_ids = parseAlertGroupIds(row.alert_group);
-    editForm.enable_alert = editForm.alert_group_ids.length > 0;
-  } else {
-    resetEditForm();
-  }
-  editDialogVisible.value = true;
-  nextTick(() => {
-    formRef.value?.clearValidate?.();
-  });
-}
-
-function onEnableAlertChange(value: boolean) {
-  if (!value) {
-    editForm.alert_group_ids = [];
-    formRef.value?.clearValidate?.();
-  }
-}
-
 function showDetail(row: SeatunnelTask) {
   detailTask.value = { ...row };
   detailDialogVisible.value = true;
@@ -413,43 +296,12 @@ async function onDelete(id: number) {
   }
 }
 
-async function onSubmit() {
-  await formRef.value?.submit();
+function goCreatePage() {
+  router.push('/seatunnel/stream/create');
 }
 
-async function onFormSubmit(ctx: SubmitContext) {
-  if (ctx.validateResult !== true) return;
-  if (editForm.enable_alert && editForm.alert_group_ids.length === 0) {
-    MessagePlugin.warning('请至少选择一个告警组');
-    return;
-  }
-
-  submitLoading.value = true;
-  try {
-    const payload: Partial<SeatunnelTask> = {
-      name: editForm.name,
-      description: editForm.description,
-      config: editForm.config,
-      config_format: editForm.config_format,
-      task_type: 'stream',
-      alert_group: editForm.enable_alert ? editForm.alert_group_ids.join(',') : '',
-    };
-
-    if (editForm.id) {
-      await updateTaskApi(editForm.id, payload, 'stream');
-      MessagePlugin.success('更新成功');
-    } else {
-      await createTaskApi(payload);
-      MessagePlugin.success('创建成功');
-    }
-    editDialogVisible.value = false;
-    await fetchTasks();
-  } catch (error: unknown) {
-    console.error(error);
-    MessagePlugin.error(error instanceof Error ? error.message : '保存失败');
-  } finally {
-    submitLoading.value = false;
-  }
+function goEditPage(row: SeatunnelTask) {
+  router.push(`/seatunnel/stream/${row.id}/edit`);
 }
 
 function openSubmitDialog(task: SeatunnelTask) {
@@ -517,7 +369,15 @@ async function onSyncStatus() {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchTasks(), fetchAlertGroups()]);
+  await fetchTasks();
+});
+
+onActivated(() => {
+  if (skipFirstActivated) {
+    skipFirstActivated = false;
+    return;
+  }
+  fetchTasks();
 });
 </script>
 <style lang="less" scoped>
@@ -544,6 +404,10 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--td-comp-margin-xxl);
+}
+
+.dialog-scroll-body {
+  overflow: hidden;
 }
 
 </style>

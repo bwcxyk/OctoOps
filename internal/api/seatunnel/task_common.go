@@ -125,6 +125,22 @@ func deleteTask(c *gin.Context, fixedTaskType string) {
 	c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
 }
 
+func getTask(c *gin.Context, fixedTaskType string) {
+	id := c.Param("id")
+
+	task, err := seatunnelService.GetTaskByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
+	}
+	if fixedTaskType != "" && task.TaskType != fixedTaskType {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, task)
+}
+
 // 更新任务时同步更新调度器
 func updateTaskWithScheduler(c *gin.Context, fixedTaskType string) {
 	id := c.Param("id")
@@ -182,6 +198,10 @@ func ListBatchTasks(c *gin.Context) {
 	listTasks(c, "batch")
 }
 
+func GetBatchTask(c *gin.Context) {
+	getTask(c, "batch")
+}
+
 func CreateBatchTask(c *gin.Context) {
 	createTask(c, "batch")
 }
@@ -196,6 +216,10 @@ func DeleteBatchTask(c *gin.Context) {
 
 func ListStreamTasks(c *gin.Context) {
 	listTasks(c, "stream")
+}
+
+func GetStreamTask(c *gin.Context) {
+	getTask(c, "stream")
 }
 
 func CreateStreamTask(c *gin.Context) {

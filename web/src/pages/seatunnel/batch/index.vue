@@ -19,7 +19,7 @@
 
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-button @click="openEditDialog()">新增</t-button>
+          <t-button @click="goCreatePage">新增</t-button>
         </div>
       </t-row>
 
@@ -43,7 +43,7 @@
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="openEditDialog(row)">编辑</t-link>
+            <t-link theme="primary" @click="goEditPage(row)">编辑</t-link>
             <t-link theme="default" @click="onManualExecute(row)">手动执行</t-link>
             <t-popconfirm content="确定要删除该任务吗？" @confirm="onDelete(row.id)">
               <t-link theme="danger">删除</t-link>
@@ -66,82 +66,50 @@
       </div>
     </t-card>
 
-    <t-dialog
-      v-model:visible="editDialogVisible"
-      :header="editForm.id ? '编辑批任务' : '新增批任务'"
-      width="900px"
-      :confirm-btn="{ content: '保存', theme: 'primary', loading: submitLoading }"
-      @confirm="onSubmit"
-    >
-      <t-form ref="formRef" :data="editForm" :rules="rules" label-width="110px" @submit="onFormSubmit">
-        <t-form-item label="作业名称" name="name">
-          <t-input v-model="editForm.name" />
-        </t-form-item>
-        <t-form-item label="描述" name="description">
-          <t-input v-model="editForm.description" />
-        </t-form-item>
-        <t-form-item label="状态" name="status">
-          <t-switch v-model="editForm.status" :custom-value="[1, 0]" />
-        </t-form-item>
-        <t-form-item label="Cron表达式" name="cron_expr">
-          <t-input v-model="editForm.cron_expr" placeholder="秒 分 时 日 月 周" />
-        </t-form-item>
-        <t-form-item label="配置风格" name="config_format">
-          <t-select v-model="editForm.config_format" style="width: 180px">
-            <t-option label="JSON" value="json" />
-            <t-option label="HOCON" value="hocon" />
-          </t-select>
-        </t-form-item>
-        <t-form-item label="作业配置" name="config">
-          <t-textarea v-model="editForm.config" :autosize="{ minRows: 10, maxRows: 16 }" />
-        </t-form-item>
-      </t-form>
-    </t-dialog>
-
     <t-dialog v-model:visible="detailDialogVisible" header="任务详情" width="720px" :footer="false">
-      <t-descriptions :column="1" bordered>
-        <t-descriptions-item label="作业名称">{{ detailTask.name }}</t-descriptions-item>
-        <t-descriptions-item label="描述">{{ detailTask.description || '-' }}</t-descriptions-item>
-        <t-descriptions-item label="状态">{{
-          Number(detailTask.status || 0) === 1 ? '启用' : '禁用'
-        }}</t-descriptions-item>
-        <t-descriptions-item label="任务类型">{{ detailTask.task_type }}</t-descriptions-item>
-        <t-descriptions-item label="Cron表达式">{{ detailTask.cron_expr || '-' }}</t-descriptions-item>
-        <t-descriptions-item label="下次执行时间">
-          {{ detailTask.next_run_time ? formatDateTime(detailTask.next_run_time) : '未设置' }}
-        </t-descriptions-item>
-        <t-descriptions-item label="最后运行时间">
-          {{ detailTask.last_run_time ? formatDateTime(detailTask.last_run_time) : '未运行' }}
-        </t-descriptions-item>
-        <t-descriptions-item label="创建时间">{{ formatDateTime(detailTask.created_at) }}</t-descriptions-item>
-        <t-descriptions-item label="更新时间">{{ formatDateTime(detailTask.updated_at) }}</t-descriptions-item>
-        <t-descriptions-item label="作业配置">
-          <t-textarea :model-value="detailTask.config || ''" readonly :autosize="{ minRows: 10, maxRows: 14 }" />
-        </t-descriptions-item>
-      </t-descriptions>
+      <div class="dialog-scroll-body">
+        <t-descriptions :column="1" bordered>
+          <t-descriptions-item label="作业名称">{{ detailTask.name }}</t-descriptions-item>
+          <t-descriptions-item label="描述">{{ detailTask.description || '-' }}</t-descriptions-item>
+          <t-descriptions-item label="状态">{{
+            Number(detailTask.status || 0) === 1 ? '启用' : '禁用'
+          }}</t-descriptions-item>
+          <t-descriptions-item label="任务类型">{{ detailTask.task_type }}</t-descriptions-item>
+          <t-descriptions-item label="Cron表达式">{{ detailTask.cron_expr || '-' }}</t-descriptions-item>
+          <t-descriptions-item label="下次执行时间">
+            {{ detailTask.next_run_time ? formatDateTime(detailTask.next_run_time) : '未设置' }}
+          </t-descriptions-item>
+          <t-descriptions-item label="最后运行时间">
+            {{ detailTask.last_run_time ? formatDateTime(detailTask.last_run_time) : '未运行' }}
+          </t-descriptions-item>
+          <t-descriptions-item label="创建时间">{{ formatDateTime(detailTask.created_at) }}</t-descriptions-item>
+          <t-descriptions-item label="更新时间">{{ formatDateTime(detailTask.updated_at) }}</t-descriptions-item>
+          <t-descriptions-item label="作业配置">
+            <CodeEditor
+              :model-value="detailTask.config || ''"
+              :active="detailDialogVisible"
+              :language="detailConfigLanguage"
+              :height="220"
+              readonly
+            />
+          </t-descriptions-item>
+        </t-descriptions>
+      </div>
     </t-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import type { FormRule, PrimaryTableCol, SubmitContext, TableRowData } from 'tdesign-vue-next';
+import type { PrimaryTableCol, TableRowData } from 'tdesign-vue-next';
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next';
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onActivated, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import type { SeatunnelTask } from '@/api/model/seatunnelModel';
-import { createTaskApi, deleteTaskApi, getTasksApi, submitJobApi, updateTaskApi } from '@/api/seatunnel';
+import { deleteTaskApi, getTasksApi, submitJobApi, updateTaskApi } from '@/api/seatunnel';
+import CodeEditor from '@/components/code-editor/index.vue';
 import { isValidCronExpression } from '@/utils/cron';
 
 defineOptions({ name: 'SeatunnelBatchTask' });
-
-interface BatchEditForm {
-  id?: number;
-  name: string;
-  description: string;
-  status: 0 | 1;
-  cron_expr: string;
-  config_format: 'json' | 'hocon';
-  config: string;
-}
 
 const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '序号', colKey: 'index', width: 80 },
@@ -154,50 +122,23 @@ const columns: PrimaryTableCol<TableRowData>[] = [
   { title: '操作', colKey: 'op', width: 240 },
 ];
 
-const rules: Record<string, FormRule[]> = {
-  name: [{ required: true, message: '请输入作业名称', type: 'error' }],
-  config: [{ required: true, message: '请输入作业配置', type: 'error' }],
-  cron_expr: [
-    {
-      validator: (_val) => {
-        const expr = (editForm.cron_expr || '').trim();
-        // 禁用状态允许为空，启用状态必须填写
-        if (editForm.status !== 1 && !expr) return true;
-        if (!expr) return { result: false, message: '批处理任务启用时必须填写 Cron 表达式' };
-        return isValidCronExpression(expr) ? true : { result: false, message: '无效的 Cron 表达式' };
-      },
-      type: 'warning',
-    },
-  ],
-};
-
 const loading = ref(false);
-const submitLoading = ref(false);
 const tasks = ref<SeatunnelTask[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
+const router = useRouter();
 
 const searchForm = reactive({
   name: '',
   status: undefined as number | undefined,
 });
 
-const editDialogVisible = ref(false);
 const detailDialogVisible = ref(false);
-const formRef = ref();
-
-const editForm = reactive<BatchEditForm>({
-  id: undefined,
-  name: '',
-  description: '',
-  status: 0,
-  cron_expr: '',
-  config_format: 'json',
-  config: '',
-});
 
 const detailTask = ref<Partial<SeatunnelTask>>({});
+const detailConfigLanguage = computed(() => ((detailTask.value.config_format as 'json' | 'hocon') || 'json'));
+let skipFirstActivated = true;
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -251,78 +192,17 @@ function onPageSizeChange(size: number) {
   fetchTasks();
 }
 
-function resetEditForm() {
-  editForm.id = undefined;
-  editForm.name = '';
-  editForm.description = '';
-  editForm.status = 0;
-  editForm.cron_expr = '';
-  editForm.config_format = 'json';
-  editForm.config = '';
-}
-
-function openEditDialog(row?: SeatunnelTask) {
-  if (row) {
-    editForm.id = row.id;
-    editForm.name = row.name || '';
-    editForm.description = row.description || '';
-    editForm.status = Number(row.status || 0) === 1 ? 1 : 0;
-    editForm.cron_expr = row.cron_expr || '';
-    editForm.config_format = (row.config_format as 'json' | 'hocon') || 'json';
-    editForm.config = row.config || '';
-  } else {
-    resetEditForm();
-  }
-  editDialogVisible.value = true;
-}
-
 function showDetail(row: SeatunnelTask) {
   detailTask.value = { ...row };
   detailDialogVisible.value = true;
 }
 
-async function onSubmit() {
-  await formRef.value?.submit();
+function goCreatePage() {
+  router.push('/seatunnel/batch/create');
 }
 
-async function onFormSubmit(ctx: SubmitContext) {
-  if (ctx.validateResult !== true) return;
-  if (editForm.status === 1 && !editForm.cron_expr.trim()) {
-    MessagePlugin.error('批处理任务启用时必须填写 Cron 表达式');
-    return;
-  }
-  if (editForm.cron_expr.trim() && !isValidCronExpression(editForm.cron_expr.trim())) {
-    MessagePlugin.error('无效的 Cron 表达式');
-    return;
-  }
-
-  submitLoading.value = true;
-  try {
-    const payload: Partial<SeatunnelTask> = {
-      name: editForm.name,
-      description: editForm.description,
-      status: editForm.status,
-      cron_expr: editForm.cron_expr,
-      config: editForm.config,
-      config_format: editForm.config_format,
-      task_type: 'batch',
-    };
-
-    if (editForm.id) {
-      await updateTaskApi(editForm.id, payload, 'batch');
-      MessagePlugin.success('更新成功');
-    } else {
-      await createTaskApi(payload);
-      MessagePlugin.success('创建成功');
-    }
-    editDialogVisible.value = false;
-    await fetchTasks();
-  } catch (error: unknown) {
-    console.error(error);
-    MessagePlugin.error(error instanceof Error ? error.message : '保存失败');
-  } finally {
-    submitLoading.value = false;
-  }
+function goEditPage(row: SeatunnelTask) {
+  router.push(`/seatunnel/batch/${row.id}/edit`);
 }
 
 async function onDelete(id: number) {
@@ -383,6 +263,14 @@ function onManualExecute(task: SeatunnelTask) {
 }
 
 onMounted(fetchTasks);
+
+onActivated(() => {
+  if (skipFirstActivated) {
+    skipFirstActivated = false;
+    return;
+  }
+  fetchTasks();
+});
 </script>
 <style lang="less" scoped>
 .list-card-container {
@@ -408,5 +296,9 @@ onMounted(fetchTasks);
   display: flex;
   justify-content: flex-end;
   margin-top: var(--td-comp-margin-xxl);
+}
+
+.dialog-scroll-body {
+  overflow: hidden;
 }
 </style>
