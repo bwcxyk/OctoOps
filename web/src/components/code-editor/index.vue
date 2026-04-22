@@ -152,9 +152,12 @@ function recreateModel() {
   if (!editor)
     return;
 
-  modelRef.value?.dispose();
-  modelRef.value = createModel();
-  editor.setModel(modelRef.value);
+  const previousModel = modelRef.value;
+  const nextModel = createModel();
+
+  modelRef.value = nextModel;
+  editor.setModel(nextModel);
+  previousModel?.dispose();
 }
 
 function layoutEditor() {
@@ -176,6 +179,7 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     wordWrap: 'on',
     lineNumbers: 'on',
+    occurrencesHighlight: 'off',
     tabSize: 2,
     fontSize: 13,
     fontFamily: "Consolas, 'Courier New', monospace",
@@ -223,6 +227,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  editorRef.value?.setModel(null);
   editorRef.value?.dispose();
   modelRef.value?.dispose();
 });
