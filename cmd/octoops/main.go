@@ -11,6 +11,7 @@ import (
 	rbacApi "octoops/internal/api/rbac"
 	seatunnelApi "octoops/internal/api/seatunnel"
 	taskApi "octoops/internal/api/task"
+	"octoops/internal/assets"
 	"octoops/internal/config"
 	"octoops/internal/infra/postgres"
 	infraRedis "octoops/internal/infra/redis"
@@ -73,27 +74,8 @@ func main() {
 	rbacApi.RegisterRoleRoutes(apiGroup)
 	rbacApi.RegisterPermissionRoutes(apiGroup)
 
-	// 静态资源托管
-	r.Static("/assets", "./frontend/assets")
-	r.StaticFile("/favicon.ico", "./frontend/favicon.ico")
-
-	// 首页路由 - 直接返回index.html
-	r.GET("/", func(c *gin.Context) {
-		c.File("./frontend/index.html")
-	})
-
-	// 其他所有前端路由 - 返回index.html
-	r.NoRoute(func(c *gin.Context) {
-		// 如果是API路径但未匹配,返回404
-		if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "API not found",
-			})
-			return
-		}
-		// 非API路径都返回前端页面
-		c.File("./frontend/index.html")
-	})
+	// 前端静态资源托管（由 build tag 控制：embed_frontend 嵌入二进制，否则提示本地开发）
+	assets.SetupFrontend(r)
 
 	// 优雅启动和关闭
 	serverAddr := fmt.Sprintf(":%d", config.GetServerPort())
