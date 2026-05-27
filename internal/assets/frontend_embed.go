@@ -6,6 +6,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,40 +15,51 @@ import (
 var distFS embed.FS
 
 var (
-	frontendFS http.FileSystem
-	assetsFS   http.FileSystem
+	sub       fs.FS
+	indexHTML []byte // 缓存 index.html 提高并发性能
 )
 
 func init() {
-	sub, err := fs.Sub(distFS, "dist")
+	var err error
+	// 剥离出 dist 目录
+	sub, err = fs.Sub(distFS, "dist")
 	if err != nil {
-		panic("failed to create sub filesystem: " + err.Error())
+		panic(err)
 	}
-	frontendFS = http.FS(sub)
-	assetSub, err := fs.Sub(sub, "assets")
+
+	// 提前将 index.html 读入内存
+	indexHTML, err = fs.ReadFile(sub, "index.html")
 	if err != nil {
-		panic("failed to create assets sub filesystem: " + err.Error())
+		panic(err)
 	}
-	assetsFS = http.FS(assetSub)
 }
 
 // SetupFrontend registers embedded frontend routes on the Gin engine.
 func SetupFrontend(r *gin.Engine) {
-	r.StaticFS("/assets", assetsFS)
+	// 1. 直接将 sub 映射到 /assets，Gin 会自动在 sub (即 dist 目录) 下寻找 "assets" 文件夹
+	r.StaticFS("/assets", http.FS(sub))
 
+	// 2. Favicon 图标路由
 	r.GET("/favicon.ico", func(c *gin.Context) {
-		c.FileFromFS("/favicon.ico", frontendFS)
+		data, err := fs.ReadFile(sub, "favicon.ico")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "image/x-icon", data)
 	})
 
-	r.GET("/", func(c *gin.Context) {
-		c.FileFromFS("/index.html", frontendFS)
-	})
-
+	// 3. SPA 兜底路由 (HTML5 History Mode)
 	r.NoRoute(func(c *gin.Context) {
-		if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+		path := c.Request.URL.Path
+
+		// 如果是没找到的 API 请求，直接返回 404 JSON，不要返回 index.html
+		if strings.HasPrefix(path, "/api") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API not found"})
 			return
 		}
-		c.FileFromFS("/index.html", frontendFS)
+
+		// 其它所有前端路由（如 /dashboard, /login），都返回 index.html 让前端路由去处理
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 }

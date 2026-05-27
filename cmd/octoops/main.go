@@ -48,8 +48,6 @@ func main() {
 
 	// 初始化 Gin 引擎
 	r := gin.New()
-	r.RedirectTrailingSlash = false
-	r.RedirectFixedPath = false
 	r.Use(gin.Logger(), gin.Recovery())
 
 	// API路由组
