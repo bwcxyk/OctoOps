@@ -11,65 +11,65 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// embed dist
 //go:embed all:dist
 var distFS embed.FS
 
 var (
-	sub        fs.FS
-	assetsSub  fs.FS
-	indexHTML  []byte
+	distRoot  fs.FS
+	assetsFS  fs.FS
+	indexHTML []byte
+	favicon   []byte
 )
 
 func init() {
 	var err error
 
-	// dist 根目录
-	sub, err = fs.Sub(distFS, "dist")
+	// 1. 获取 dist 根目录
+	distRoot, err = fs.Sub(distFS, "dist")
 	if err != nil {
 		panic(err)
 	}
 
-	// dist/assets
-	assetsSub, err = fs.Sub(sub, "assets")
+	// 2. 切出 assets 子目录，精准映射静态资源
+	assetsFS, err = fs.Sub(distRoot, "assets")
 	if err != nil {
 		panic(err)
 	}
 
-	// 预加载 index.html（避免每次 IO）
-	indexHTML, err = fs.ReadFile(sub, "index.html")
+	// 3. 预加载 index.html
+	indexHTML, err = fs.ReadFile(distRoot, "index.html")
 	if err != nil {
 		panic(err)
+	}
+
+	// 4. 预加载 favicon.ico（如果存在）
+	favicon, err = fs.ReadFile(distRoot, "favicon.ico")
+	if err != nil {
+		// 如果前端打包没生成 favicon，保留为 nil 即可，避免程序直接崩溃
+		favicon = nil
 	}
 }
 
+// SetupFrontend 注册前端托管路由
 func SetupFrontend(r *gin.Engine) {
 
-	// =========================
-	// 1. 静态资源（关键）
-	// =========================
-	r.StaticFS("/assets", http.FS(assetsSub))
+	// 静态资源路由，直接映射到 dist/assets 目录
+	r.StaticFS("/assets", http.FS(assetsFS))
 
-	// =========================
-	// 2. favicon
-	// =========================
+	// 处理 favicon.ico 请求
 	r.GET("/favicon.ico", func(c *gin.Context) {
-		data, err := fs.ReadFile(sub, "favicon.ico")
-		if err != nil {
+		if favicon == nil {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		c.Data(http.StatusOK, "image/x-icon", data)
+		c.Data(http.StatusOK, "image/x-icon", favicon)
 	})
 
-	// =========================
-	// 3. SPA fallback
-	// =========================
+	// 其他所有路由都返回 index.html，由前端路由接管
 	r.NoRoute(func(c *gin.Context) {
-
 		path := c.Request.URL.Path
 
-		// API 不吞
+		// API 路由未命中，直接返回标准 404 JSON
 		if strings.HasPrefix(path, "/api") {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "API not found",
@@ -77,7 +77,7 @@ func SetupFrontend(r *gin.Engine) {
 			return
 		}
 
-		// 统一返回 index.html（SPA）
+		// 其余所有页面路由统一返回内存中的 index.html，交由前端路由接管
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 }
