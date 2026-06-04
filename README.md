@@ -31,15 +31,19 @@ docker run -d --name octoops -p 8080:8080 octoops-allinone
 ### 3) 初始化 RBAC 与管理员账号
 
 ```bash
-docker exec -it octoops /app/octoops-init
+# 首次初始化（需要设置密码）
+docker exec -e ADMIN_PASSWORD=YourSecurePassword octoops /app/octoops-init
+
+# 重复执行（admin 已存在时可跳过密码参数）
+docker exec octoops /app/octoops-init
 ```
 
 初始化后会创建默认管理员：
 
 - 用户名：`admin`
-- 密码：随机生成（执行 `octoops-init` 时输出在日志中）
+- 密码：通过环境变量 `ADMIN_PASSWORD` 设置（首次初始化时必须）
 
-首次登录后请立即修改密码。
+> ⚠️ 请确保密码长度至少 8 位，且包含大小写字母和数字。
 
 ### 4) 访问系统
 
