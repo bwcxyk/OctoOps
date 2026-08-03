@@ -27,3 +27,6 @@ Thumbs.db
 
 # 本地配置文件
 config.yaml
+
+# CodeBuddy 工作目录（含记忆、自动化等本地数据，不提交）
+.codebuddy/
