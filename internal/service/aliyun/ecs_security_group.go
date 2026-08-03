@@ -1,10 +1,7 @@
 package aliyun
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -20,28 +17,6 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	credential "github.com/aliyun/credentials-go/credentials"
 )
-
-// 获取当前公网IP
-func GetCurrentPublicIP() (string, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://www.ipplus360.com/getIP")
-	if err != nil {
-		return "", err
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Printf("Close Body error: %v", err)
-		}
-	}(resp.Body)
-	var result struct {
-		Data string `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-	return result.Data, nil
-}
 
 // 获取数据库中最新的安全组配置
 func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.SGConfig, error) {
@@ -152,7 +127,7 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	}
 
 	oldIP := cfg.LastIP
-	newIP, err := GetCurrentPublicIP()
+	newIP, err := utils.GetCurrentPublicIP()
 	if err != nil {
 		return fmt.Errorf("获取公网IP失败: %v", err)
 	}
