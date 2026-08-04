@@ -9,6 +9,10 @@
 *.test
 *.out
 
+# 制品
+octoops-init
+octoops
+
 # Go vendor
 /vendor/
 
@@ -30,3 +34,4 @@ config.yaml
 
 # CodeBuddy 工作目录（含记忆、自动化等本地数据，不提交）
 .codebuddy/
+
