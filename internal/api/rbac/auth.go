@@ -5,8 +5,8 @@ import (
 	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
+	"octoops/internal/pkg/crypto"
 	"octoops/internal/pkg/jwt"
-	"octoops/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -87,7 +87,7 @@ func login(c *gin.Context) {
 	}
 
 	// 验证密码
-	if !utils.VerifyPassword(req.Password, user.Password) {
+	if !crypto.VerifyPassword(req.Password, user.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    401,
 			"message": "用户名或密码错误",
@@ -176,7 +176,7 @@ func register(c *gin.Context) {
 		return
 	}
 
-	if err := utils.ValidatePasswordComplexity(req.Password); err != nil {
+	if err := crypto.ValidatePasswordComplexity(req.Password); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -185,7 +185,7 @@ func register(c *gin.Context) {
 	}
 
 	// 加密密码
-	hashedPassword, err := utils.HashPassword(req.Password)
+	hashedPassword, err := crypto.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,

@@ -6,15 +6,15 @@ import (
 	"text/template"
 
 	"octoops/internal/model/alert"
-	"octoops/internal/utils"
+	"octoops/internal/pkg/mail"
 
 	"github.com/yuin/goldmark"
 )
 
 // 邮件测试发送
 func SendTestEmail(alert *alert.AlertChannel) error {
-	// 直接调用 utils.SendMail
-	return utils.SendMail(utils.MailOptions{
+	// 直接调用 mail.SendMail
+	return mail.SendMail(mail.MailOptions{
 		To:      alert.Target,
 		Subject: "OctoOps 测试通知",
 		Body:    "这是一条测试邮件通知。",
@@ -43,7 +43,7 @@ func SendEmailWithTemplate(alert *alert.AlertChannel, tplContent string, data ma
 		return err
 	}
 
-	return utils.SendMail(utils.MailOptions{
+	return mail.SendMail(mail.MailOptions{
 		To:      alert.Target,
 		Subject: "OctoOps 告警通知",
 		Body:    body,
