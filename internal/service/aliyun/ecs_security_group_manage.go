@@ -48,13 +48,18 @@ func UpdateEcsSecurityGroupConfig(id string, req map[string]interface{}) (aliyun
 		return aliyunModel.SGConfig{}, err
 	}
 	if sk, ok := req["access_secret"].(string); ok && sk != "" {
-		_, decodeErr := base64.StdEncoding.DecodeString(sk)
-		if decodeErr != nil || len(sk) < 32 {
-			encrypted, encErr := utils.EncryptAES(sk)
-			if encErr != nil {
-				return aliyunModel.SGConfig{}, fmt.Errorf("SK加密失败: %v", encErr)
+		// 跳过已加密的值，避免二次加密：
+		//   - gcm:xxx   → AES-GCM 加密，须跳过
+		//   - 纯 base64 且长度足够 → 旧版 AES-CBC 加密，须跳过
+		if !strings.HasPrefix(sk, "gcm:") {
+			_, decodeErr := base64.StdEncoding.DecodeString(sk)
+			if decodeErr != nil || len(sk) < 32 {
+				encrypted, encErr := utils.EncryptAES(sk)
+				if encErr != nil {
+					return aliyunModel.SGConfig{}, fmt.Errorf("SK加密失败: %v", encErr)
+				}
+				req["access_secret"] = encrypted
 			}
-			req["access_secret"] = encrypted
 		}
 	}
 	if err := postgres.DB.Model(&cfg).Updates(req).Error; err != nil {
