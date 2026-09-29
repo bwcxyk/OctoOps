@@ -1,16 +1,18 @@
 # --------- 前端构建阶段 ---------
-FROM node:20 AS frontend-build
+FROM node:24.21.0 AS frontend-build
 
 WORKDIR /app/web
 
-COPY web/package*.json ./
-RUN npm install
+RUN corepack enable
+
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 # --------- 后端构建阶段 ---------
-FROM golang:1.25 AS backend-build
+FROM golang:1.27.1 AS backend-build
 
 WORKDIR /app
 
@@ -29,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -tags embed_
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o octoops-init ./cmd/init-rbac/main.go
 
 # --------- 运行阶段 ---------
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 ENV TZ=Asia/Shanghai
 
 WORKDIR /app
