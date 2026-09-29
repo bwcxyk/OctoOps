@@ -25,8 +25,8 @@ COPY --from=frontend-build /app/web/dist /app/internal/assets/dist
 # 复制 example 文件为 config.yaml
 COPY config.yaml.example /app/config.yaml
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed_frontend -o octoops ./cmd/octoops/main.go
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o octoops-init ./cmd/init-rbac/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -tags embed_frontend -o octoops ./cmd/octoops/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o octoops-init ./cmd/init-rbac/main.go
 
 # --------- 运行阶段 ---------
 FROM debian:bullseye-slim

@@ -8,7 +8,8 @@ import (
 	"octoops/internal/infra/postgres"
 	"octoops/internal/middleware"
 	"octoops/internal/model/rbac"
-	"octoops/internal/utils"
+	"octoops/internal/pkg/crypto"
+	"octoops/internal/pkg/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -228,7 +229,7 @@ func createUser(c *gin.Context) {
 		return
 	}
 
-	if err := utils.ValidatePasswordComplexity(req.Password); err != nil {
+	if err := crypto.ValidatePasswordComplexity(req.Password); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -237,7 +238,7 @@ func createUser(c *gin.Context) {
 	}
 
 	// 加密密码
-	hashedPassword, err := utils.HashPassword(req.Password)
+	hashedPassword, err := crypto.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -628,7 +629,7 @@ func changePassword(c *gin.Context) {
 	}
 
 	// 验证旧密码
-	if !utils.VerifyPassword(req.OldPassword, user.Password) {
+	if !crypto.VerifyPassword(req.OldPassword, user.Password) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "旧密码错误",
@@ -636,7 +637,7 @@ func changePassword(c *gin.Context) {
 		return
 	}
 
-	if err := utils.ValidatePasswordComplexity(req.NewPassword); err != nil {
+	if err := crypto.ValidatePasswordComplexity(req.NewPassword); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -645,7 +646,7 @@ func changePassword(c *gin.Context) {
 	}
 
 	// 加密新密码
-	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	hashedPassword, err := crypto.HashPassword(req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -720,7 +721,7 @@ func sendResetCode(c *gin.Context) {
 	}
 	subject := "OctoOps 验证码"
 	body := "您的验证码为 <b>" + code + "</b>，5分钟内有效。"
-	if err := utils.SendMail(utils.MailOptions{
+	if err := mail.SendMail(mail.MailOptions{
 		To:      email,
 		Subject: subject,
 		Body:    body,
@@ -788,11 +789,11 @@ func forgotPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "验证码错误或已过期"})
 		return
 	}
-	if err := utils.ValidatePasswordComplexity(req.NewPassword); err != nil {
+	if err := crypto.ValidatePasswordComplexity(req.NewPassword); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	hashedPassword, err := crypto.HashPassword(req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "密码加密失败"})
 		return

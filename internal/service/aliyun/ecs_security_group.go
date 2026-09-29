@@ -10,7 +10,8 @@ import (
 	"log"
 	"octoops/internal/infra/postgres"
 	aliyunModel "octoops/internal/model/aliyun"
-	"octoops/internal/utils"
+	"octoops/internal/pkg/crypto"
+	"octoops/internal/pkg/ip"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/client"
 	ecs "github.com/alibabacloud-go/ecs-20140526/v2/client"
@@ -31,7 +32,7 @@ func GetAliyunSGConfig(db *gorm.DB) (*aliyunModel.SGConfig, error) {
 // 初始化ECS客户端（无AK方式，推荐）
 func Initialization(cfg *aliyunModel.SGConfig) (*ecs.Client, error) {
 	ak := cfg.AccessKey
-	sk, err := utils.DecryptAES(cfg.AccessSecret)
+	sk, err := crypto.DecryptAES(cfg.AccessSecret)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid padding") {
 			return nil, fmt.Errorf("ECS客户端初始化失败: 请检查AES密钥与加密时使用是否一致")
@@ -127,7 +128,7 @@ func UpdateSecurityGroupIfIPChanged(db *gorm.DB) error {
 	}
 
 	oldIP := cfg.LastIP
-	newIP, err := utils.GetCurrentPublicIP()
+	newIP, err := ip.GetCurrentPublicIP()
 	if err != nil {
 		return fmt.Errorf("获取公网IP失败: %v", err)
 	}

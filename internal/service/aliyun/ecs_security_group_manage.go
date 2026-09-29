@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"octoops/internal/infra/postgres"
 	aliyunModel "octoops/internal/model/aliyun"
-	"octoops/internal/utils"
+	"octoops/internal/pkg/crypto"
 	"strings"
 
 	"gorm.io/gorm"
@@ -28,7 +28,7 @@ func ListEcsSecurityGroupConfigs(status, accessKey, name string) ([]aliyunModel.
 }
 
 func CreateEcsSecurityGroupConfig(cfg *aliyunModel.SGConfig) error {
-	sk, err := utils.EncryptAES(cfg.AccessSecret)
+	sk, err := crypto.EncryptAES(cfg.AccessSecret)
 	if err != nil {
 		return fmt.Errorf("SK加密失败: %v", err)
 	}
@@ -54,7 +54,7 @@ func UpdateEcsSecurityGroupConfig(id string, req map[string]interface{}) (aliyun
 		if !strings.HasPrefix(sk, "gcm:") {
 			_, decodeErr := base64.StdEncoding.DecodeString(sk)
 			if decodeErr != nil || len(sk) < 32 {
-				encrypted, encErr := utils.EncryptAES(sk)
+				encrypted, encErr := crypto.EncryptAES(sk)
 				if encErr != nil {
 					return aliyunModel.SGConfig{}, fmt.Errorf("SK加密失败: %v", encErr)
 				}

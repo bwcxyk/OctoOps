@@ -5,7 +5,7 @@ import (
 	"octoops/internal/config"
 	"octoops/internal/infra/postgres"
 	"octoops/internal/model/rbac"
-	"octoops/internal/utils"
+	"octoops/internal/pkg/crypto"
 	"os"
 )
 
@@ -392,7 +392,7 @@ func createDefaultAdmin(roles map[string]*model.Role) {
 	}
 
 	// 加密密码
-	hashedPassword, err := utils.HashPassword(initialPassword)
+	hashedPassword, err := crypto.HashPassword(initialPassword)
 	if err != nil {
 		log.Printf("密码加密失败: %v", err)
 		return
