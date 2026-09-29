@@ -3,11 +3,13 @@ FROM node:24.21.0 AS frontend-build
 
 WORKDIR /app/web
 
-COPY web/package*.json ./
-RUN npm install
+RUN corepack enable
+
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 # --------- 后端构建阶段 ---------
 FROM golang:1.27.1 AS backend-build
