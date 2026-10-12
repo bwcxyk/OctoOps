@@ -413,37 +413,9 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 		return
 	}
 	staleIDs := make([]uint, 0, len(stale))
-	staleSet := make(map[uint]bool, len(stale))
 	for _, p := range stale {
-		log.Printf("回收权限: %s（%s）", p.Code, p.Name)
 		staleIDs = append(staleIDs, p.ID)
-		staleSet[p.ID] = true
 	}
-
-	// 仍在定义中的子权限若指向待回收父级，删除父级会让 parent_id 悬空，本次跳过这些父级
-	var children []model.Permission
-	if err := postgres.DB.Where("parent_id IN ?", staleIDs).Find(&children).Error; err != nil {
-		log.Printf("查询子权限失败: %v", err)
-		return
-	}
-	keepParent := make(map[uint]bool)
-	for _, c := range children {
-		if !staleSet[c.ID] {
-			log.Printf("错误：权限 %s（%s）仍挂在待回收的父级 %d 下，请先把该子权限一并从定义中移除，本次跳过该父级", c.Code, c.Name, c.ParentID)
-			keepParent[c.ParentID] = true
-		}
-	}
-	deletable := make([]uint, 0, len(staleIDs))
-	for _, id := range staleIDs {
-		if !keepParent[id] {
-			deletable = append(deletable, id)
-		}
-	}
-	if len(deletable) == 0 {
-		log.Println("本次没有可安全回收的权限")
-		return
-	}
-	staleIDs = deletable
 
 	// 先解除角色关联，再删除权限（子权限在前，避免父级外键约束）
 	if err := postgres.DB.Where("permission_id IN ?", staleIDs).Delete(&model.RolePermission{}).Error; err != nil {
@@ -458,7 +430,8 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 		log.Printf("删除失效权限失败: %v", err)
 		return
 	}
-	log.Printf("已回收 %d 个失效权限", len(staleIDs))
+	log.Printf("已回收 %d 个失效权限", len(stale))
+
 }
 
 // createDefaultAdmin 创建默认管理员用户
