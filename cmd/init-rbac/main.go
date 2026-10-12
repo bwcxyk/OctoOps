@@ -7,7 +7,18 @@ import (
 	"octoops/internal/model/rbac"
 	"octoops/internal/pkg/crypto"
 	"os"
+
+	"gorm.io/gorm/clause"
 )
+
+// findPermissionByCode 按 code 查询权限，不存在返回 false（用 Find 避免 gorm 打印 record not found）
+func findPermissionByCode(code string) (model.Permission, bool) {
+	var perm model.Permission
+	if err := postgres.DB.Where("code = ?", code).Limit(1).Find(&perm).Error; err != nil || perm.Code == "" {
+		return model.Permission{}, false
+	}
+	return perm, true
+}
 
 func main() {
 	// 初始化配置和数据库
@@ -63,8 +74,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			Status:      1,
 			ParentID:    0,
 		}
-		var existing model.Permission
-		if err := postgres.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
+		if existing, ok := findPermissionByCode(perm.Code); ok {
 			postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        perm.Name,
 				"description": perm.Description,
@@ -120,8 +130,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			Status:      1,
 			ParentID:    menuMap[s.Parent].ID,
 		}
-		var existing model.Permission
-		if err := postgres.DB.Where("code = ?", perm.Code).First(&existing).Error; err == nil {
+		if existing, ok := findPermissionByCode(perm.Code); ok {
 			postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        perm.Name,
 				"description": perm.Description,
@@ -226,8 +235,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	// 三级操作权限
 	for i := range permissions {
 		p := &permissions[i]
-		var existing model.Permission
-		if err := postgres.DB.Where("code = ?", p.Code).First(&existing).Error; err == nil {
+		if existing, ok := findPermissionByCode(p.Code); ok {
 			if err := postgres.DB.Model(&existing).Updates(map[string]interface{}{
 				"name":        p.Name,
 				"description": p.Description,
@@ -307,17 +315,11 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 
 	// 管理员：所有权限
 	if admin, exists := roles["管理员"]; exists {
-		var rolePermissions []model.RolePermission
-		for _, p := range permissions {
-			rolePermissions = append(rolePermissions, model.RolePermission{
-				RoleID:       admin.ID,
-				PermissionID: p.ID,
-			})
+		codes := make([]string, 0, len(permissions))
+		for code := range permissions {
+			codes = append(codes, code)
 		}
-		if len(rolePermissions) > 0 {
-			postgres.DB.Create(&rolePermissions)
-			log.Printf("为管理员分配了 %d 个权限", len(rolePermissions))
-		}
+		assignRolePermissions("管理员", admin, permissions, codes)
 	}
 
 	// 操作员：仅新增/修改/查询权限
@@ -332,19 +334,7 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			"task:log", "task:log:read",
 			"system:setting", "system:setting:read", "system:setting:update",
 		}
-		var rolePermissions []model.RolePermission
-		for _, code := range operatorPermissions {
-			if p, exists := permissions[code]; exists {
-				rolePermissions = append(rolePermissions, model.RolePermission{
-					RoleID:       operator.ID,
-					PermissionID: p.ID,
-				})
-			}
-		}
-		if len(rolePermissions) > 0 {
-			postgres.DB.Create(&rolePermissions)
-			log.Printf("为操作员分配了 %d 个权限", len(rolePermissions))
-		}
+		assignRolePermissions("操作员", operator, permissions, operatorPermissions)
 	}
 
 	// 观察者：只有查看权限
@@ -359,20 +349,29 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			// 系统设置
 			"system:setting", "system:setting:read",
 		}
-		var rolePermissions []model.RolePermission
-		for _, code := range observerPermissions {
-			if p, exists := permissions[code]; exists {
-				rolePermissions = append(rolePermissions, model.RolePermission{
-					RoleID:       observer.ID,
-					PermissionID: p.ID,
-				})
-			}
-		}
-		if len(rolePermissions) > 0 {
-			postgres.DB.Create(&rolePermissions)
-			log.Printf("为观察者分配了 %d 个权限", len(rolePermissions))
+		assignRolePermissions("观察者", observer, permissions, observerPermissions)
+	}
+}
+
+// assignRolePermissions 批量分配角色权限，已存在的关系跳过（脚本可重复执行）
+func assignRolePermissions(roleName string, role *model.Role, permissions map[string]*model.Permission, codes []string) {
+	rolePermissions := make([]model.RolePermission, 0, len(codes))
+	for _, code := range codes {
+		if p, exists := permissions[code]; exists {
+			rolePermissions = append(rolePermissions, model.RolePermission{
+				RoleID:       role.ID,
+				PermissionID: p.ID,
+			})
 		}
 	}
+	if len(rolePermissions) == 0 {
+		return
+	}
+	if err := postgres.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePermissions).Error; err != nil {
+		log.Printf("为%s分配权限失败: %v", roleName, err)
+		return
+	}
+	log.Printf("为%s同步了 %d 个权限（已存在则跳过）", roleName, len(rolePermissions))
 }
 
 // createDefaultAdmin 创建默认管理员用户
