@@ -107,6 +107,9 @@
     align-items: center;
 
     &.remember-pwd {
+      // TDesign 升级后 password 表单项会被加上 t-form__item--last（margin: 0），
+      // 与"记住账号"一行的间距不再由表单项下边距提供，这里补回
+      margin-top: var(--td-comp-margin-xxl);
       margin-bottom: var(--td-comp-margin-l);
       justify-content: space-between;
     }
