@@ -16,12 +16,15 @@ import (
 )
 
 func getAesKey() ([]byte, error) {
-	key := config.GetAliyunAesKey()
+	key := config.GetAesKey()
 	if len(key) != 32 {
-		return nil, errors.New("octoops.aliyun.aes_key must be 32 bytes (AES-256)")
+		return nil, errors.New("octoops.security.aes_key must be 32 bytes (AES-256)")
 	}
 	return []byte(key), nil
 }
+
+// aesPrefix 密文前缀，用于区分格式
+const aesPrefix = "gcm:"
 
 // EncryptAES encrypts with AES-GCM and returns a versioned base64 string.
 func EncryptAES(plainText string) (string, error) {
@@ -43,12 +46,20 @@ func EncryptAES(plainText string) (string, error) {
 	}
 	cipherText := gcm.Seal(nil, nonce, []byte(plainText), nil)
 	encoded := base64.StdEncoding.EncodeToString(append(nonce, cipherText...))
-	return "gcm:" + encoded, nil
+	return aesPrefix + encoded, nil
 }
 
-// DecryptAES decrypts AES-GCM values and falls back to legacy AES-CBC.
+// DecryptAES decrypts AES-GCM values produced by EncryptAES.
 func DecryptAES(cipherBase64 string) (string, error) {
 	key, err := getAesKey()
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(cipherBase64, aesPrefix) {
+		return "", errors.New("密文格式不正确，应为 " + aesPrefix + " 开头的 AES-GCM 密文")
+	}
+	raw := strings.TrimPrefix(cipherBase64, aesPrefix)
+	cipherText, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
 		return "", err
 	}
@@ -56,46 +67,20 @@ func DecryptAES(cipherBase64 string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if strings.HasPrefix(cipherBase64, "gcm:") {
-		raw := strings.TrimPrefix(cipherBase64, "gcm:")
-		cipherText, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil {
-			return "", err
-		}
-		gcm, err := cipher.NewGCM(block)
-		if err != nil {
-			return "", err
-		}
-		if len(cipherText) < gcm.NonceSize() {
-			return "", errors.New("cipherText is too short")
-		}
-		nonce := cipherText[:gcm.NonceSize()]
-		enc := cipherText[gcm.NonceSize():]
-		plain, err := gcm.Open(nil, nonce, enc, nil)
-		if err != nil {
-			return "", err
-		}
-		return string(plain), nil
-	}
-
-	// Legacy AES-CBC (fixed IV) for backward compatibility
-	cipherText, err := base64.StdEncoding.DecodeString(cipherBase64)
+	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return "", err
 	}
-	if len(cipherText)%aes.BlockSize != 0 {
-		return "", errors.New("cipherText is not a multiple of the block size")
+	if len(cipherText) < gcm.NonceSize() {
+		return "", errors.New("cipherText is too short")
 	}
-	iv := key[:aes.BlockSize]
-	mode := cipher.NewCBCDecrypter(block, iv)
-	plain := make([]byte, len(cipherText))
-	mode.CryptBlocks(plain, cipherText)
-	// Remove PKCS7 padding
-	pad := int(plain[len(plain)-1])
-	if pad > aes.BlockSize || pad == 0 {
-		return "", errors.New("invalid padding")
+	nonce := cipherText[:gcm.NonceSize()]
+	enc := cipherText[gcm.NonceSize():]
+	plain, err := gcm.Open(nil, nonce, enc, nil)
+	if err != nil {
+		return "", err
 	}
-	return string(plain[:len(plain)-pad]), nil
+	return string(plain), nil
 }
 
 // HashPassword 使用bcrypt加密密码

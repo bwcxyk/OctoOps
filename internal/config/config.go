@@ -27,21 +27,12 @@ func (p PostgresConfig) DSN() string {
 	)
 }
 
-type MailConfig struct {
-	SMTPAddress  string `yaml:"smtp_address"`
-	SMTPPort     int    `yaml:"smtp_port"`
-	SMTPUser     string `yaml:"smtp_user"`
-	SMTPPassword string `yaml:"smtp_password"`
-	DisplayName  string `yaml:"display_name"`
-	Enable       bool   `yaml:"enable"`
-	SSL          bool   `yaml:"ssl"`
-}
-
 type SeatunnelConfig struct {
 	BaseURL string `yaml:"base_url"`
 }
 
-type AliyunConfig struct {
+// SecurityConfig 通用安全配置，用于各类敏感信息（阿里云密钥、邮件密码等）的对称加密
+type SecurityConfig struct {
 	AesKey string `yaml:"aes_key"`
 }
 
@@ -61,11 +52,10 @@ type RedisConfig struct {
 }
 
 type OctoopsConfig struct {
-	Mail   MailConfig   `yaml:"mail"`
-	Aliyun AliyunConfig `yaml:"aliyun"`
-	Auth   AuthConfig   `yaml:"auth"`
-	Server ServerConfig `yaml:"server"`
-	Redis  RedisConfig  `yaml:"redis"`
+	Security SecurityConfig `yaml:"security"`
+	Auth     AuthConfig     `yaml:"auth"`
+	Server   ServerConfig   `yaml:"server"`
+	Redis    RedisConfig    `yaml:"redis"`
 	// 预留字段，后续可扩展
 }
 
@@ -78,8 +68,7 @@ type Config struct {
 var (
 	SeatunnelBaseURL string
 	PostgresDSN      string
-	mailConfig       MailConfig
-	aliyunAesKey     string
+	aesKey           string
 	jwtSecret        string
 	serverPort       int
 	redisConfig      RedisConfig
@@ -133,17 +122,8 @@ func InitConfig() error {
 	// Seatunnel
 	overrideStringField("SEATUNNEL_BASE_URL", &cfg.Seatunnel.BaseURL)
 
-	// Octoops.Mail
-	overrideStringField("OCTOOPS_MAIL_SMTP_ADDRESS", &cfg.Octoops.Mail.SMTPAddress)
-	overrideIntField("OCTOOPS_MAIL_SMTP_PORT", &cfg.Octoops.Mail.SMTPPort)
-	overrideStringField("OCTOOPS_MAIL_SMTP_USER", &cfg.Octoops.Mail.SMTPUser)
-	overrideStringField("OCTOOPS_MAIL_SMTP_PASSWORD", &cfg.Octoops.Mail.SMTPPassword)
-	overrideStringField("OCTOOPS_MAIL_DISPLAY_NAME", &cfg.Octoops.Mail.DisplayName)
-	overrideBoolField("OCTOOPS_MAIL_ENABLE", &cfg.Octoops.Mail.Enable)
-	overrideBoolField("OCTOOPS_MAIL_SSL", &cfg.Octoops.Mail.SSL)
-
-	// Octoops.Aliyun
-	overrideStringField("OCTOOPS_ALIYUN_AES_KEY", &cfg.Octoops.Aliyun.AesKey)
+	// Octoops.Security
+	overrideStringField("OCTOOPS_SECURITY_AES_KEY", &cfg.Octoops.Security.AesKey)
 
 	// Octoops.Auth
 	overrideStringField("OCTOOPS_AUTH_JWT_SECRET", &cfg.Octoops.Auth.JWTSecret)
@@ -165,8 +145,7 @@ func InitConfig() error {
 
 	SeatunnelBaseURL = cfg.Seatunnel.BaseURL
 	PostgresDSN = cfg.Postgres.DSN()
-	mailConfig = cfg.Octoops.Mail
-	aliyunAesKey = cfg.Octoops.Aliyun.AesKey
+	aesKey = cfg.Octoops.Security.AesKey
 	jwtSecret = cfg.Octoops.Auth.JWTSecret
 	serverPort = cfg.Octoops.Server.Port
 	redisConfig = cfg.Octoops.Redis
@@ -185,12 +164,9 @@ func InitConfig() error {
 	return nil
 }
 
-func GetMailConfig() MailConfig {
-	return mailConfig
-}
-
-func GetAliyunAesKey() string {
-	return aliyunAesKey
+// GetAesKey 返回通用 AES-256 密钥，用于敏感信息（阿里云密钥、邮件密码等）加解密
+func GetAesKey() string {
+	return aesKey
 }
 
 func GetJWTSecret() string {
@@ -204,3 +180,4 @@ func GetServerPort() int {
 func GetRedisConfig() RedisConfig {
 	return redisConfig
 }
+

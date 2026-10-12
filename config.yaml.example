@@ -10,18 +10,10 @@ octoops:
     password: "" # Redis 密码
     db: 0 # Redis DB
     prefix: "octoops:" # Redis key 前缀
-  aliyun:
-    aes_key: "12345678901234567890123456789012" # AES加密密钥，32字节（AES-256）
+  security:
+    aes_key: "12345678901234567890123456789012" # 通用AES加密密钥（32字节 AES-256），用于阿里云密钥、邮件密码等敏感信息加解密，请勿随意变更
   auth:
     jwt_secret: "CHANGE_ME" # JWT签名密钥，生产环境请使用强密钥
-  mail:
-    enable: true  # 是否启用邮件通知
-    smtp_address: smtp.example.com  # SMTP 服务器地址
-    ssl: true  # 是否启用 SSL
-    smtp_port: 465  # SMTP 端口，常用 465(SSL) 或 25
-    smtp_user: your-email@example.com  # 邮箱账号
-    smtp_password: your-email-password  # 邮箱密码或授权码
-    display_name: OctoOps  # 邮件显示发件人名称
 
 # PostgreSQL 数据库配置
 postgres:
