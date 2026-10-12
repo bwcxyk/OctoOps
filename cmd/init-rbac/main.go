@@ -59,26 +59,27 @@ func main() {
 	log.Println("RBAC系统初始化完成！")
 }
 
-// initRBAC 同步权限树 -> 回收失效权限 -> 对齐角色授权 -> 创建默认管理员，任一步骤失败即返回错误
+// initRBAC 只新增和更新，不删除任何已有数据：权限树同步 -> 默认角色及授权补齐 -> 默认管理员
 func initRBAC() error {
-	// 1. 创建与菜单一致的权限树
+	// 1. 创建或更新权限树
 	permissions, err := createMenuLikePermissions()
 	if err != nil {
-		return err
+		return fmt.Errorf("同步权限失败: %w", err)
 	}
 
-	// 2. 回收脚本中已删除的权限：默认只提示，带 --prune 参数才实际删除
-	if err := pruneStalePermissions(permissions); err != nil {
-		return err
+	// 2. 创建默认角色，并增量补齐角色权限
+	roles, err := createDefaultRoles(permissions)
+	if err != nil {
+		return fmt.Errorf("初始化角色失败: %w", err)
 	}
 
-	// 3. 创建默认角色并对齐权限（授权时会清掉失效权限残留的角色关联）
-	if _, err := createDefaultRoles(permissions); err != nil {
-		return err
+	// 3. 创建默认管理员（已存在则跳过，不覆盖密码、不自动提权）
+	if err := createDefaultAdmin(); err != nil {
+		return fmt.Errorf("初始化默认管理员失败: %w", err)
 	}
 
-	// 4. 创建默认管理员用户
-	return createDefaultAdmin()
+	log.Printf("RBAC 初始化完成：同步了 %d 个权限，检查了 %d 个默认角色", len(permissions), len(roles))
+	return nil
 }
 
 // createMenuLikePermissions 创建与菜单结构一致的权限树
@@ -268,6 +269,7 @@ func upsertPermission(perm model.Permission) (model.Permission, error) {
 		}
 		return perm, nil
 	}
+	// 只更新代码维护的字段，不动 status：后台停用过的权限不因重启被重新启用
 	if err := db.Model(&existing).Updates(map[string]interface{}{
 		"name":        perm.Name,
 		"description": perm.Description,
@@ -275,7 +277,6 @@ func upsertPermission(perm model.Permission) (model.Permission, error) {
 		"path":        perm.Path,
 		"order_num":   perm.OrderNum,
 		"method":      perm.Method,
-		"status":      perm.Status,
 		"parent_id":   perm.ParentID,
 	}).Error; err != nil {
 		return model.Permission{}, fmt.Errorf("更新权限 %s 失败: %w", perm.Code, err)
@@ -315,15 +316,13 @@ func createDefaultRoles(permissions map[string]*model.Permission) (map[string]*m
 			return nil, fmt.Errorf("查询角色 %s 失败: %w", r.Name, err)
 		}
 		if existing.Name != "" {
-			// 默认角色以脚本定义为准，同步描述与状态
+			// 只同步描述，保留数据库中的角色状态（后台停用过的角色不因重启被重新启用）
 			if err := db.Model(&existing).Updates(map[string]interface{}{
 				"description": r.Description,
-				"status":      r.Status,
 			}).Error; err != nil {
 				return nil, fmt.Errorf("更新角色 %s 失败: %w", r.Name, err)
 			}
 			existing.Description = r.Description
-			existing.Status = r.Status
 			roleMap[r.Name] = &existing
 			continue
 		}
@@ -394,116 +393,37 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	return nil
 }
 
-// assignRolePermissions 对齐角色权限：缺失的补上，已不再授权的删除（脚本可重复执行）
+// assignRolePermissions 补齐角色权限：只新增缺失的关联，不删除任何已有授权
 func assignRolePermissions(roleName string, role *model.Role, permissions map[string]*model.Permission, codes []string) error {
-	// 目标列表为空时直接失败，避免误删该角色的全部授权
+	if role == nil {
+		return fmt.Errorf("角色 %s 为空", roleName)
+	}
 	if len(codes) == 0 {
-		return fmt.Errorf("角色 %s 的目标权限列表为空，终止对齐", roleName)
+		return fmt.Errorf("角色 %s 的目标权限列表为空", roleName)
 	}
 	rolePermissions := make([]model.RolePermission, 0, len(codes))
-	ids := make([]uint, 0, len(codes))
+	seen := make(map[string]struct{}, len(codes))
 	for _, code := range codes {
-		p, exists := permissions[code]
-		if !exists {
-			// 目标权限不存在说明脚本定义有误，此时不能继续删除，否则会误清已有授权
+		// 避免配置列表重复
+		if _, ok := seen[code]; ok {
+			continue
+		}
+		seen[code] = struct{}{}
+
+		permission, exists := permissions[code]
+		if !exists || permission == nil {
 			return fmt.Errorf("角色 %s 的目标权限 %s 不存在", roleName, code)
 		}
 		rolePermissions = append(rolePermissions, model.RolePermission{
 			RoleID:       role.ID,
-			PermissionID: p.ID,
+			PermissionID: permission.ID,
 		})
-		ids = append(ids, p.ID)
 	}
-	// 删除该角色上不在本次授权列表内的关联
-	if err := db.Where("role_id = ? AND permission_id NOT IN ?", role.ID, ids).
-		Delete(&model.RolePermission{}).Error; err != nil {
-		return fmt.Errorf("清理%s的多余权限失败: %w", roleName, err)
-	}
-	// role_permissions 以 (role_id, permission_id) 为主键，重复关联直接忽略
+	// 只补齐缺失关联；role_permissions 以 (role_id, permission_id) 为主键，重复关联直接忽略
 	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePermissions).Error; err != nil {
-		return fmt.Errorf("为%s分配权限失败: %w", roleName, err)
+		return fmt.Errorf("为角色 %s 补齐权限失败: %w", roleName, err)
 	}
-	log.Printf("为%s对齐了 %d 个权限", roleName, len(rolePermissions))
-	return nil
-}
-
-// pruneStalePermissions 回收脚本定义中已删除的权限，默认只打印，带 --prune 时删除
-// permissions 必须是完整同步成功的权限清单，否则正常权限会被误判为失效
-func pruneStalePermissions(permissions map[string]*model.Permission) error {
-	var all []model.Permission
-	if err := db.Find(&all).Error; err != nil {
-		return fmt.Errorf("查询已有权限失败: %w", err)
-	}
-	stale := make([]model.Permission, 0)
-	for _, p := range all {
-		if _, ok := permissions[p.Code]; !ok {
-			stale = append(stale, p)
-		}
-	}
-	if len(stale) == 0 {
-		return nil
-	}
-	prune := len(os.Args) > 1 && os.Args[1] == "--prune"
-	if !prune {
-		for _, p := range stale {
-			log.Printf("提示：权限 %s（%s）已不在脚本定义中，如需删除请带 --prune 参数执行", p.Code, p.Name)
-		}
-		return nil
-	}
-	// 父级失效时其下子权限一并回收
-	childrenOf := make(map[uint][]uint)
-	for _, p := range all {
-		if p.ParentID != 0 {
-			childrenOf[p.ParentID] = append(childrenOf[p.ParentID], p.ID)
-		}
-	}
-	dead := make(map[uint]bool, len(stale))
-	var markDead func(id uint)
-	markDead = func(id uint) {
-		if dead[id] {
-			return
-		}
-		dead[id] = true
-		for _, cid := range childrenOf[id] {
-			markDead(cid)
-		}
-	}
-	for _, p := range stale {
-		markDead(p.ID)
-	}
-
-	deadIDs := make([]uint, 0, len(dead))
-	for id := range dead {
-		deadIDs = append(deadIDs, id)
-	}
-
-	// 自底向上删除，避免父级外键约束
-	pending := make(map[uint]bool, len(dead))
-	for id := range dead {
-		pending[id] = true
-	}
-	for len(pending) > 0 {
-		batch := make([]uint, 0)
-		for id := range pending {
-			hasChild := false
-			for _, cid := range childrenOf[id] {
-				if pending[cid] {
-					hasChild = true
-					break
-				}
-			}
-			if !hasChild {
-				batch = append(batch, id)
-			}
-		}
-		if err := db.Where("id IN ?", batch).Delete(&model.Permission{}).Error; err != nil {
-			return fmt.Errorf("删除失效权限失败: %w", err)
-		}
-		for _, id := range batch {
-			delete(pending, id)
-		}
-	}
-	log.Printf("已回收 %d 个失效权限", len(deadIDs))
+	log.Printf("已检查角色 %s 的 %d 个默认权限", roleName, len(rolePermissions))
 	return nil
 }
 
@@ -527,8 +447,7 @@ func createDefaultAdmin() error {
 	// 从环境变量获取管理员密码
 	initialPassword := os.Getenv("ADMIN_PASSWORD")
 	if initialPassword == "" {
-		log.Printf("未设置环境变量 ADMIN_PASSWORD，跳过创建管理员用户")
-		return nil
+		return fmt.Errorf("未设置环境变量 ADMIN_PASSWORD，无法创建默认管理员")
 	}
 
 	if len(initialPassword) < 8 {
