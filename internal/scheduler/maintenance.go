@@ -4,8 +4,8 @@ import (
 	"log"
 	"octoops/internal/infra/postgres"
 	systemModel "octoops/internal/model/system"
-	"octoops/internal/pkg/settingstore"
 	taskModel "octoops/internal/model/task"
+	syssetting "octoops/internal/pkg/setting"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -42,7 +42,7 @@ func registerMaintenanceTasks() {
 // 与 service/system 保持同样的解析规则：调度器不能被 service/system 反向依赖，这里直接读设置表
 func taskLogRetentionDays() int {
 	var rs systemModel.RetentionSetting
-	if !settingstore.Get(systemModel.KeyTaskLogRetentionDays, &rs) {
+	if !syssetting.Get(systemModel.KeyTaskLogRetentionDays, &rs) {
 		return systemModel.DefaultTaskLogRetentionDays
 	}
 	if rs.Days != systemModel.TaskLogRetentionDisabled && rs.Days < 1 {

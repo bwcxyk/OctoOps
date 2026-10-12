@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	systemModel "octoops/internal/model/system"
-	"octoops/internal/pkg/settingstore"
+	syssetting "octoops/internal/pkg/setting"
 
 	"gopkg.in/gomail.v2"
 )
@@ -67,7 +67,7 @@ func sendWithConfig(cfg systemModel.MailSetting, opt MailOptions) error {
 // CurrentMailConfig 邮件配置，来源为系统设置
 func CurrentMailConfig() systemModel.MailSetting {
 	var ms systemModel.MailSetting
-	found, err := settingstore.GetMail(&ms)
+	found, err := syssetting.GetMail(&ms)
 	if err != nil {
 		log.Printf("[Mail] 读取邮件配置失败: %v", err)
 		return defaultMailSetting()

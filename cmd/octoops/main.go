@@ -18,7 +18,6 @@ import (
 	infraRedis "octoops/internal/infra/redis"
 	"octoops/internal/pkg/jwt"
 	"octoops/internal/scheduler"
-	systemService "octoops/internal/service/system"
 	"os"
 	"os/signal"
 	"syscall"
@@ -46,8 +45,7 @@ func main() {
 	if err := infraRedis.Init(redisCfg); err != nil {
 		log.Fatalf("初始化Redis失败: %v", err)
 	}
-	systemService.SeedSettings() // 初始化系统设置项（系统任务配置源）
-	scheduler.InitScheduler()    // 初始化定时任务（按设置项注册系统任务）
+	scheduler.InitScheduler() // 初始化定时任务（按设置项注册系统任务，未配置的项不注册）
 
 	// 初始化 Gin 引擎
 	r := gin.New()

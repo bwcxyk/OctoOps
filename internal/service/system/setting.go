@@ -9,7 +9,7 @@ import (
 
 	"octoops/internal/infra/postgres"
 	systemModel "octoops/internal/model/system"
-	"octoops/internal/pkg/settingstore"
+	syssetting "octoops/internal/pkg/setting"
 	"octoops/internal/scheduler"
 
 	"github.com/robfig/cron/v3"
@@ -19,52 +19,6 @@ import (
 var cronParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
 func taskSettingKey(taskType string) string { return "task." + taskType }
-
-// seedRetentionSetting 补齐日志保留天数默认值
-func seedRetentionSetting() {
-	if _, ok := loadSetting(systemModel.KeyTaskLogRetentionDays); ok {
-		return
-	}
-	if err := saveRetentionSetting(systemModel.DefaultTaskLogRetentionDays); err != nil {
-		log.Printf("[System] 设置项 %s 初始化失败: %v", systemModel.KeyTaskLogRetentionDays, err)
-	}
-}
-
-// seedMailSetting 首次启动时写入邮件设置的默认值，之后在系统设置页维护
-func seedMailSetting() {
-	if _, ok := loadSetting(systemModel.KeyMailSMTP); ok {
-		return
-	}
-	ms := systemModel.MailSetting{
-		Enable:   false,
-		SMTPPort: systemModel.DefaultSMTPPort,
-		Security: systemModel.MailSecuritySSL,
-	}
-	if err := saveMailSetting(ms); err != nil {
-		log.Printf("[System] 设置项 %s 初始化失败: %v", systemModel.KeyMailSMTP, err)
-		return
-	}
-	log.Printf("[System] 设置项 %s 已初始化为默认值（未启用）", systemModel.KeyMailSMTP)
-}
-
-// SeedSettings 启动时补齐设置项的默认值（只写库，不触碰调度器）
-func SeedSettings() {
-	seedRetentionSetting()
-	seedMailSetting()
-	for _, def := range scheduler.SystemTaskDefs() {
-		key := taskSettingKey(def.Type)
-		if _, ok := loadSetting(key); ok {
-			continue
-		}
-		ts := systemModel.TaskSetting{Enabled: def.DefaultOn, Cron: def.DefaultCron}
-		if err := saveTaskSetting(key, ts); err != nil {
-			log.Printf("[System] 设置项 %s 初始化失败: %v", key, err)
-			continue
-		}
-		log.Printf("[System] 设置项 %s 初始化为默认值 enabled=%v, cron=%s", key, ts.Enabled, ts.Cron)
-	}
-	log.Printf("[System] 系统设置初始化完成")
-}
 
 // GetSettings 返回全部设置项，value 已还原为 JSON 对象
 func GetSettings() (map[string]json.RawMessage, error) {
@@ -78,7 +32,7 @@ func GetSettings() (map[string]json.RawMessage, error) {
 	}
 	// 邮件密码不返回明文（库中为密文），前端原样回传 MaskedSecret 表示不修改
 	var ms systemModel.MailSetting
-	found, err := settingstore.GetMail(&ms)
+	found, err := syssetting.GetMail(&ms)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +172,7 @@ func saveRetentionSetting(days int) error {
 func saveMailSetting(ms systemModel.MailSetting) error {
 	if ms.SMTPPassword == systemModel.MaskedSecret || strings.TrimSpace(ms.SMTPPassword) == "" {
 		var old systemModel.MailSetting
-		found, err := settingstore.GetMail(&old)
+		found, err := syssetting.GetMail(&old)
 		if err != nil {
 			return err
 		}
@@ -226,7 +180,7 @@ func saveMailSetting(ms systemModel.MailSetting) error {
 			ms.SMTPPassword = old.SMTPPassword
 		}
 	}
-	return settingstore.SetMail(ms)
+	return syssetting.SetMail(ms)
 }
 
 func saveTaskSetting(key string, ts systemModel.TaskSetting) error {
