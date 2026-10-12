@@ -47,6 +47,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{"任务中心", "task", "任务管理相关", "/task", 3},
 		{"告警管理", "notify", "消息通知相关", "/alert", 4},
 		{"系统管理", "rbac", "系统管理相关", "/rbac", 5},
+		{"系统设置", "system", "系统设置相关", "/system", 6},
 	}
 	menuMap := make(map[string]*model.Permission)
 	for _, m := range menuDefs {
@@ -93,8 +94,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{"离线数据集成", "etl:batch", "离线数据集成", "seatunnel", "/seatunnel/batch", 2},
 		// 任务管理
 		{"调度器", "task:scheduler", "调度器", "task", "/task/scheduler", 1},
-		{"自定义任务", "task:custom", "自定义任务", "task", "/task/custom", 2},
-		{"任务日志", "task:log", "任务日志", "task", "/task/log", 3},
+		{"任务日志", "task:log", "任务日志", "task", "/task/log", 2},
 		// 消息通知
 		{"告警组管理", "notify:group", "告警组管理", "notify", "/alert/group", 1},
 		{"告警模板", "notify:template", "告警模板", "notify", "/alert/template", 2},
@@ -103,6 +103,8 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{"用户管理", "rbac:user", "用户管理", "rbac", "/rbac/user", 1},
 		{"角色管理", "rbac:role", "角色管理", "rbac", "/rbac/role", 2},
 		{"权限管理", "rbac:permission", "权限管理", "rbac", "/rbac/permission", 3},
+		// 系统设置
+		{"基本设置", "system:setting", "基本设置", "system", "/system/setting", 1},
 	}
 	subMenuMap := make(map[string]*model.Permission)
 	for _, s := range subMenuDefs {
@@ -167,9 +169,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{Name: "重新加载", Code: "task:scheduler:reload", Description: "重新加载调度器", Type: "api", Path: "/api/task/scheduler/reload", Method: "POST", Status: 1, ParentID: subMenuMap["task:scheduler"].ID},
 		{Name: "启动", Code: "task:scheduler:start", Description: "启动调度器", Type: "api", Path: "/api/task/scheduler/start", Method: "POST", Status: 1, ParentID: subMenuMap["task:scheduler"].ID},
 		{Name: "停止", Code: "task:scheduler:stop", Description: "停止调度器", Type: "api", Path: "/api/task/scheduler/stop", Method: "POST", Status: 1, ParentID: subMenuMap["task:scheduler"].ID},
-		// 自定义任务权限
-		{Name: "查看", Code: "task:custom:read", Description: "查看自定义任务", Type: "api", Path: "/api/task/custom", Method: "GET", Status: 1, ParentID: subMenuMap["task:custom"].ID},
-		{Name: "更新", Code: "task:custom:update", Description: "更新自定义任务", Type: "api", Path: "/api/task/custom/:id", Method: "PUT", Status: 1, ParentID: subMenuMap["task:custom"].ID},
+
 		// 任务日志权限
 		{Name: "查看", Code: "task:log:read", Description: "查看任务日志", Type: "api", Path: "/api/task/log", Method: "GET", Status: 1, ParentID: subMenuMap["task:log"].ID},
 		// 告警管理
@@ -209,6 +209,9 @@ func createMenuLikePermissions() map[string]*model.Permission {
 		{Name: "创建", Code: "rbac:permission:create", Description: "创建权限", Type: "api", Path: "/api/permissions", Method: "POST", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
 		{Name: "更新", Code: "rbac:permission:update", Description: "更新权限", Type: "api", Path: "/api/permissions/:id", Method: "PUT", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
 		{Name: "删除", Code: "rbac:permission:delete", Description: "删除权限", Type: "api", Path: "/api/permissions/:id", Method: "DELETE", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
+		// 系统设置
+		{Name: "查看", Code: "system:setting:read", Description: "查看系统任务设置", Type: "api", Path: "/api/system/tasks", Method: "GET", Status: 1, ParentID: subMenuMap["system:setting"].ID},
+		{Name: "更新", Code: "system:setting:update", Description: "更新系统任务设置", Type: "api", Path: "/api/system/tasks/:type", Method: "PUT", Status: 1, ParentID: subMenuMap["system:setting"].ID},
 	}
 
 	permissionMap := make(map[string]*model.Permission)
@@ -326,8 +329,8 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			"notify:group:read",
 			// 任务中心 API
 			"task:scheduler", "task:scheduler:status",
-			"task:custom", "task:custom:read",
 			"task:log", "task:log:read",
+			"system:setting", "system:setting:read", "system:setting:update",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range operatorPermissions {
@@ -353,6 +356,8 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			"notify:group:read",
 			// 任务管理
 			"task:log", "task:log:read",
+			// 系统设置
+			"system:setting", "system:setting:read",
 		}
 		var rolePermissions []model.RolePermission
 		for _, code := range observerPermissions {

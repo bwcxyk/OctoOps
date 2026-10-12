@@ -19,12 +19,6 @@ export default [
         meta: { title: { zh_CN: '调度器状态', en_US: 'Scheduler Status' }, permission: 'task:scheduler' },
       },
       {
-        path: 'custom',
-        name: 'CustomTaskManage',
-        component: () => import('@/pages/task/custom/index.vue'),
-        meta: { title: { zh_CN: '自定义任务', en_US: 'Custom Task' }, permission: 'task:custom' },
-      },
-      {
         path: 'log',
         name: 'TaskLogManage',
         component: () => import('@/pages/task/log/index.vue'),

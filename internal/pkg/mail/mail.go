@@ -1,7 +1,10 @@
 package mail
 
 import (
-	"octoops/internal/config"
+	"log"
+
+	systemModel "octoops/internal/model/system"
+	"octoops/internal/pkg/settingstore"
 
 	"gopkg.in/gomail.v2"
 )
@@ -15,7 +18,7 @@ type MailOptions struct {
 
 // SendMail 发送邮件，支持抄送、SSL、配置化
 func SendMail(opt MailOptions) error {
-	cfg := config.GetMailConfig()
+	cfg := CurrentMailConfig()
 	if !cfg.Enable {
 		return nil // 未开启邮件
 	}
@@ -32,8 +35,28 @@ func SendMail(opt MailOptions) error {
 	m.SetHeader("Subject", opt.Subject)
 	m.SetBody("text/html", opt.Body)
 
-	d := gomail.NewDialer(cfg.SMTPAddress, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword)
-
+	port := cfg.SMTPPort
+	if port == 0 {
+		port = systemModel.DefaultSMTPPort
+	}
+	d := gomail.NewDialer(cfg.SMTPAddress, port, cfg.SMTPUser, cfg.SMTPPassword)
 	d.SSL = cfg.SSL
 	return d.DialAndSend(m)
+}
+
+// CurrentMailConfig 邮件配置，来源为系统设置
+func CurrentMailConfig() systemModel.MailSetting {
+	var ms systemModel.MailSetting
+	found, err := settingstore.GetMail(&ms)
+	if err != nil {
+		log.Printf("[Mail] 读取邮件配置失败: %v", err)
+		return systemModel.MailSetting{SMTPPort: systemModel.DefaultSMTPPort, SSL: true}
+	}
+	if !found {
+		return systemModel.MailSetting{SMTPPort: systemModel.DefaultSMTPPort, SSL: true}
+	}
+	if ms.SMTPPort == 0 {
+		ms.SMTPPort = systemModel.DefaultSMTPPort
+	}
+	return ms
 }
