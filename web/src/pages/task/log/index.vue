@@ -5,6 +5,12 @@
         <t-form-item label="任务">
           <t-input v-model="searchForm.task_name" clearable placeholder="请输入任务名称" style="width: 220px" />
         </t-form-item>
+        <t-form-item label="任务类型">
+          <t-select v-model="searchForm.task_type" clearable placeholder="全部" style="width: 140px">
+            <t-option label="ETL任务" value="etl" />
+            <t-option label="系统任务" value="system" />
+          </t-select>
+        </t-form-item>
         <t-form-item label="运行状态">
           <t-select v-model="searchForm.status" clearable placeholder="请选择状态" style="width: 140px">
             <t-option label="成功" value="success" />
@@ -33,6 +39,11 @@
         <template #status="{ row }">
           <t-tag :theme="row.status === 'success' ? 'success' : 'danger'" variant="light">
             {{ row.status === 'success' ? '成功' : row.status === 'failed' ? '失败' : row.status }}
+          </t-tag>
+        </template>
+        <template #task_type="{ row }">
+          <t-tag :theme="row.task_type === 'etl' ? 'success' : 'primary'" variant="light">
+            {{ row.task_type === 'etl' ? 'ETL任务' : row.task_type === 'system' ? '系统任务' : '-' }}
           </t-tag>
         </template>
         <template #created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -77,6 +88,7 @@ defineOptions({ name: 'TaskLogManage' });
 const columns: PrimaryTableCol<TableRowData>[] = [
   { title: 'ID', colKey: 'id', width: 80 },
   { title: '任务名称', colKey: 'task_name', width: 160, ellipsis: true },
+  { title: '任务类型', colKey: 'task_type', width: 100 },
   { title: '运行状态', colKey: 'status', width: 100 },
   { title: '创建时间', colKey: 'created_at', width: 160, ellipsis: true },
 ];
@@ -90,12 +102,36 @@ const pageSize = ref(10);
 const detailDialogVisible = ref(false);
 const detailLog = ref<Partial<TaskLogItem & { result?: string }>>({});
 
-const searchForm = reactive<{ task_name: string; status: string; start_time: string; end_time: string }>({
+const searchForm = reactive<{
+  task_name: string;
+  task_type: string;
+  status: string;
+  start_time: string;
+  end_time: string;
+}>({
   task_name: '',
+  task_type: '',
   status: '',
-  start_time: '',
-  end_time: '',
+  start_time: todayRange().start,
+  end_time: todayRange().end,
 });
+
+// 默认查询今天
+function todayRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return { start: fmt(start), end: fmt(end) };
+}
+
+function resetTimeRange() {
+  const { start, end } = todayRange();
+  searchForm.start_time = start;
+  searchForm.end_time = end;
+}
 
 function formatDateTime(value?: string) {
   if (!value) return '-';
@@ -124,6 +160,7 @@ async function fetchLogs() {
       page_size: pageSize.value,
     };
     if (searchForm.task_name) params.task_name = searchForm.task_name;
+    if (searchForm.task_type) params.task_type = searchForm.task_type;
     if (searchForm.status) params.status = searchForm.status;
     if (searchForm.start_time) params.start_time = searchForm.start_time;
     if (searchForm.end_time) params.end_time = searchForm.end_time;
@@ -146,9 +183,9 @@ function onSearch() {
 
 function onReset() {
   searchForm.task_name = '';
+  searchForm.task_type = '';
   searchForm.status = '';
-  searchForm.start_time = '';
-  searchForm.end_time = '';
+  resetTimeRange();
   page.value = 1;
   fetchLogs();
 }

@@ -120,6 +120,7 @@ func WriteTaskLogWithStatus(task seatunnelModel.EtlTask, octoopsRespBody []byte,
 	}
 	postgres.DB.Create(&taskModel.TaskLog{
 		TaskName: taskName,
+		TaskType: taskModel.TaskTypeETL,
 		Result:   string(octoopsRespBody),
 		Status:   status,
 	})

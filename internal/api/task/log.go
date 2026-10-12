@@ -23,6 +23,9 @@ func ListTaskLogs(c *gin.Context) {
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
+	if taskType := c.Query("task_type"); taskType != "" {
+		query = query.Where("task_type = ?", taskType)
+	}
 	if startTime := c.Query("start_time"); startTime != "" {
 		query = query.Where("created_at >= ?", startTime)
 	}
