@@ -37,6 +37,13 @@ type RetentionSetting struct {
 	Days int `json:"retention_days"`
 }
 
+// 邮件连接的加密方式
+const (
+	MailSecurityNone = "none" // 不加密
+	MailSecuritySSL  = "ssl"  // 隐式 SSL/TLS，常用端口 465
+	MailSecurityTLS  = "tls"  // STARTTLS，常用端口 587
+)
+
 // MailSetting 邮件服务设置项的值结构
 type MailSetting struct {
 	Enable       bool   `json:"enable"`
@@ -45,7 +52,16 @@ type MailSetting struct {
 	SMTPUser     string `json:"smtp_user"`
 	SMTPPassword string `json:"smtp_password"`
 	DisplayName  string `json:"display_name"`
-	SSL          bool   `json:"ssl"`
+	Security     string `json:"security"` // none / ssl / tls
+}
+
+// ValidSecurity 判断加密方式取值是否合法
+func ValidSecurity(security string) bool {
+	switch security {
+	case MailSecurityNone, MailSecuritySSL, MailSecurityTLS:
+		return true
+	}
+	return false
 }
 
 // DefaultSMTPPort 未指定端口时的默认值

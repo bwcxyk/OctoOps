@@ -38,7 +38,7 @@ func seedMailSetting() {
 	ms := systemModel.MailSetting{
 		Enable:   false,
 		SMTPPort: systemModel.DefaultSMTPPort,
-		SSL:      true,
+		Security: systemModel.MailSecuritySSL,
 	}
 	if err := saveMailSetting(ms); err != nil {
 		log.Printf("[System] 设置项 %s 初始化失败: %v", systemModel.KeyMailSMTP, err)
@@ -143,6 +143,9 @@ func UpdateSettings(values map[string]json.RawMessage) error {
 			}
 			if mailSetting.SMTPPort == 0 {
 				mailSetting.SMTPPort = systemModel.DefaultSMTPPort
+			}
+			if !systemModel.ValidSecurity(mailSetting.Security) {
+				return fmt.Errorf("邮件加密方式只能是 none（无）、ssl 或 tls")
 			}
 			hasMail = true
 		default:

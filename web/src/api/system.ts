@@ -13,3 +13,7 @@ export function getSystemSettingsApi() {
 export function updateSystemSettingsApi(data: Record<string, unknown>) {
   return request.put<{ data: SystemSettings }>({ url: Api.SystemSettings, data }, { isTransformResponse: false });
 }
+
+export function testMailSettingsApi(data: { to: string }) {
+  return request.post<{ data: string }>({ url: `${Api.SystemSettings}/mail/test`, data }, { isTransformResponse: false });
+}
