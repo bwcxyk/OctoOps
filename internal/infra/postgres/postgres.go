@@ -55,18 +55,5 @@ func Migrate() error {
 	); err != nil {
 		return fmt.Errorf("数据库自动迁移失败: %w", err)
 	}
-	// 历史任务日志补上类型（新日志写入时会带 task_type）
-	if err := DB.Exec(
-		`UPDATE "task_logs" SET task_type = 'system' WHERE (task_type IS NULL OR task_type = '') AND task_name IN ('作业状态同步', 'ECS 安全组同步', 'ETL 实时作业状态同步')`,
-	).Error; err != nil {
-		return fmt.Errorf("回填系统任务日志类型失败: %w", err)
-	}
-	if err := DB.Exec(`UPDATE "task_logs" SET task_type = 'etl' WHERE task_type IS NULL OR task_type = ''`).Error; err != nil {
-		return fmt.Errorf("回填任务日志类型失败: %w", err)
-	}
-	// 系统任务配置已迁移到 settings 表，删除废弃的 custom_tasks 表
-	if err := DB.Exec(`DROP TABLE IF EXISTS "custom_tasks"`).Error; err != nil {
-		return fmt.Errorf("删除废弃表 custom_tasks 失败: %w", err)
-	}
 	return nil
 }
