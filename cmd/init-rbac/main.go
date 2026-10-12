@@ -37,11 +37,11 @@ func main() {
 	// 创建与菜单一致的权限树
 	permissions := createMenuLikePermissions()
 
-	// 创建默认角色并对齐权限
-	roles := createDefaultRoles(permissions)
-
 	// 回收脚本中已删除的权限：默认只提示，带 --prune 参数才实际删除
 	pruneStalePermissions(permissions)
+
+	// 创建默认角色并对齐权限（授权时会清掉失效权限残留的角色关联）
+	roles := createDefaultRoles(permissions)
 
 	// 创建默认管理员用户
 	createDefaultAdmin(roles)
@@ -434,14 +434,9 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 		markDead(p.ID)
 	}
 
-	// 先解除角色关联
 	deadIDs := make([]uint, 0, len(dead))
 	for id := range dead {
 		deadIDs = append(deadIDs, id)
-	}
-	if err := postgres.DB.Where("permission_id IN ?", deadIDs).Delete(&model.RolePermission{}).Error; err != nil {
-		log.Printf("解除失效权限的角色关联失败: %v", err)
-		return
 	}
 
 	// 自底向上删除，避免父级外键约束
