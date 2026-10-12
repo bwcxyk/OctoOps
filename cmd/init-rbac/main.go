@@ -1,23 +1,32 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
+
 	"octoops/internal/config"
 	"octoops/internal/infra/postgres"
 	"octoops/internal/model/rbac"
 	"octoops/internal/pkg/crypto"
-	"os"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// findPermissionByCode 按 code 查询权限，不存在返回 false（用 Find 避免 gorm 打印 record not found）
-func findPermissionByCode(code string) (model.Permission, bool) {
+// db 本次初始化使用的数据库句柄，在事务中执行，任一步骤失败整体回滚
+var db *gorm.DB
+
+// findPermissionByCode 按 code 查询权限；第二个返回值为是否存在，查询出错时返回 error
+func findPermissionByCode(code string) (model.Permission, bool, error) {
 	var perm model.Permission
-	if err := postgres.DB.Where("code = ?", code).Limit(1).Find(&perm).Error; err != nil || perm.Code == "" {
-		return model.Permission{}, false
+	if err := db.Where("code = ?", code).Limit(1).Find(&perm).Error; err != nil {
+		return model.Permission{}, false, fmt.Errorf("查询权限 %s 失败: %w", code, err)
 	}
-	return perm, true
+	if perm.Code == "" {
+		return model.Permission{}, false, nil
+	}
+	return perm, true, nil
 }
 
 func main() {
@@ -34,23 +43,46 @@ func main() {
 
 	log.Println("开始初始化RBAC系统...")
 
-	// 创建与菜单一致的权限树
-	permissions := createMenuLikePermissions()
-
-	// 回收脚本中已删除的权限：默认只提示，带 --prune 参数才实际删除
-	pruneStalePermissions(permissions)
-
-	// 创建默认角色并对齐权限（授权时会清掉失效权限残留的角色关联）
-	roles := createDefaultRoles(permissions)
-
-	// 创建默认管理员用户
-	createDefaultAdmin(roles)
+	tx := postgres.DB.Begin()
+	if tx.Error != nil {
+		log.Fatalf("开启事务失败: %v", tx.Error)
+	}
+	db = tx
+	if err := initRBAC(); err != nil {
+		tx.Rollback()
+		log.Fatalf("初始化RBAC系统失败，已回滚: %v", err)
+	}
+	if err := tx.Commit().Error; err != nil {
+		log.Fatalf("提交事务失败: %v", err)
+	}
 
 	log.Println("RBAC系统初始化完成！")
 }
 
+// initRBAC 同步权限树 -> 回收失效权限 -> 对齐角色授权 -> 创建默认管理员，任一步骤失败即返回错误
+func initRBAC() error {
+	// 1. 创建与菜单一致的权限树
+	permissions, err := createMenuLikePermissions()
+	if err != nil {
+		return err
+	}
+
+	// 2. 回收脚本中已删除的权限：默认只提示，带 --prune 参数才实际删除
+	if err := pruneStalePermissions(permissions); err != nil {
+		return err
+	}
+
+	// 3. 创建默认角色并对齐权限（授权时会清掉失效权限残留的角色关联）
+	if _, err := createDefaultRoles(permissions); err != nil {
+		return err
+	}
+
+	// 4. 创建默认管理员用户
+	return createDefaultAdmin()
+}
+
 // createMenuLikePermissions 创建与菜单结构一致的权限树
-func createMenuLikePermissions() map[string]*model.Permission {
+func createMenuLikePermissions() (map[string]*model.Permission, error) {
 	// 1. 一级菜单
 	menuDefs := []struct {
 		Name, Code, Desc, Path string
@@ -65,8 +97,7 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	}
 	menuMap := make(map[string]*model.Permission)
 	for _, m := range menuDefs {
-		var perm model.Permission
-		perm = model.Permission{
+		perm, err := upsertPermission(model.Permission{
 			Name:        m.Name,
 			Code:        m.Code,
 			Description: m.Desc,
@@ -76,21 +107,9 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			Method:      "",
 			Status:      1,
 			ParentID:    0,
-		}
-		if existing, ok := findPermissionByCode(perm.Code); ok {
-			postgres.DB.Model(&existing).Updates(map[string]interface{}{
-				"name":        perm.Name,
-				"description": perm.Description,
-				"type":        perm.Type,
-				"path":        perm.Path,
-				"order_num":   perm.OrderNum,
-				"method":      perm.Method,
-				"status":      perm.Status,
-				"parent_id":   perm.ParentID,
-			})
-			postgres.DB.First(&perm, existing.ID)
-		} else {
-			postgres.DB.Create(&perm)
+		})
+		if err != nil {
+			return nil, err
 		}
 		menuMap[m.Code] = &perm
 	}
@@ -121,8 +140,11 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	}
 	subMenuMap := make(map[string]*model.Permission)
 	for _, s := range subMenuDefs {
-		var perm model.Permission
-		perm = model.Permission{
+		parent, ok := menuMap[s.Parent]
+		if !ok {
+			return nil, fmt.Errorf("二级菜单 %s 的父级 %s 不存在", s.Code, s.Parent)
+		}
+		perm, err := upsertPermission(model.Permission{
 			Name:        s.Name,
 			Code:        s.Code,
 			Description: s.Desc,
@@ -131,22 +153,10 @@ func createMenuLikePermissions() map[string]*model.Permission {
 			OrderNum:    s.OrderNum,
 			Method:      "",
 			Status:      1,
-			ParentID:    menuMap[s.Parent].ID,
-		}
-		if existing, ok := findPermissionByCode(perm.Code); ok {
-			postgres.DB.Model(&existing).Updates(map[string]interface{}{
-				"name":        perm.Name,
-				"description": perm.Description,
-				"type":        perm.Type,
-				"path":        perm.Path,
-				"order_num":   perm.OrderNum,
-				"method":      perm.Method,
-				"status":      perm.Status,
-				"parent_id":   perm.ParentID,
-			})
-			postgres.DB.First(&perm, existing.ID)
-		} else {
-			postgres.DB.Create(&perm)
+			ParentID:    parent.ID,
+		})
+		if err != nil {
+			return nil, err
 		}
 		subMenuMap[s.Code] = &perm
 	}
@@ -237,37 +247,47 @@ func createMenuLikePermissions() map[string]*model.Permission {
 	}
 	// 三级操作权限
 	for i := range permissions {
-		p := &permissions[i]
-		if existing, ok := findPermissionByCode(p.Code); ok {
-			if err := postgres.DB.Model(&existing).Updates(map[string]interface{}{
-				"name":        p.Name,
-				"description": p.Description,
-				"type":        p.Type,
-				"path":        p.Path,
-				"method":      p.Method,
-				"status":      p.Status,
-				"parent_id":   p.ParentID,
-			}).Error; err != nil {
-				log.Printf("更新权限 %s 失败: %v", p.Code, err)
-				continue
-			}
-			postgres.DB.First(&existing, existing.ID)
-			log.Printf("更新权限: %s", p.Code)
-			permissionMap[p.Code] = &existing
-			continue
+		perm, err := upsertPermission(permissions[i])
+		if err != nil {
+			return nil, err
 		}
-		if err := postgres.DB.Create(p).Error; err != nil {
-			log.Printf("创建权限 %s 失败: %v", p.Code, err)
-			continue
-		}
-		log.Printf("创建权限: %s", p.Code)
-		permissionMap[p.Code] = p
+		permissionMap[perm.Code] = &perm
 	}
-	return permissionMap
+	return permissionMap, nil
 }
 
-// createDefaultRoles 创建默认角色
-func createDefaultRoles(permissions map[string]*model.Permission) map[string]*model.Role {
+// upsertPermission 按 code 创建或更新权限，返回库中的最新记录；任何数据库错误都会返回 error
+func upsertPermission(perm model.Permission) (model.Permission, error) {
+	existing, found, err := findPermissionByCode(perm.Code)
+	if err != nil {
+		return model.Permission{}, err
+	}
+	if !found {
+		if err := db.Create(&perm).Error; err != nil {
+			return model.Permission{}, fmt.Errorf("创建权限 %s 失败: %w", perm.Code, err)
+		}
+		return perm, nil
+	}
+	if err := db.Model(&existing).Updates(map[string]interface{}{
+		"name":        perm.Name,
+		"description": perm.Description,
+		"type":        perm.Type,
+		"path":        perm.Path,
+		"order_num":   perm.OrderNum,
+		"method":      perm.Method,
+		"status":      perm.Status,
+		"parent_id":   perm.ParentID,
+	}).Error; err != nil {
+		return model.Permission{}, fmt.Errorf("更新权限 %s 失败: %w", perm.Code, err)
+	}
+	if err := db.First(&existing, existing.ID).Error; err != nil {
+		return model.Permission{}, fmt.Errorf("回读权限 %s 失败: %w", perm.Code, err)
+	}
+	return existing, nil
+}
+
+// createDefaultRoles 创建默认角色并对齐权限
+func createDefaultRoles(permissions map[string]*model.Permission) (map[string]*model.Role, error) {
 	roles := []model.Role{
 		{
 			Name:        "管理员",
@@ -288,32 +308,43 @@ func createDefaultRoles(permissions map[string]*model.Permission) map[string]*mo
 
 	roleMap := make(map[string]*model.Role)
 
-	for _, r := range roles {
-		// 检查角色是否已存在
+	for i := range roles {
+		r := roles[i]
 		var existing model.Role
-		if err := postgres.DB.Where("name = ?", r.Name).Limit(1).Find(&existing).Error; err == nil && existing.Name != "" {
-			log.Printf("角色 %s 已存在，跳过创建", r.Name)
+		if err := db.Where("name = ?", r.Name).Limit(1).Find(&existing).Error; err != nil {
+			return nil, fmt.Errorf("查询角色 %s 失败: %w", r.Name, err)
+		}
+		if existing.Name != "" {
+			// 默认角色以脚本定义为准，同步描述与状态
+			if err := db.Model(&existing).Updates(map[string]interface{}{
+				"description": r.Description,
+				"status":      r.Status,
+			}).Error; err != nil {
+				return nil, fmt.Errorf("更新角色 %s 失败: %w", r.Name, err)
+			}
+			existing.Description = r.Description
+			existing.Status = r.Status
 			roleMap[r.Name] = &existing
 			continue
 		}
 
-		// 创建角色
-		if err := postgres.DB.Create(&r).Error; err != nil {
-			log.Printf("创建角色 %s 失败: %v", r.Name, err)
-			continue
+		if err := db.Create(&r).Error; err != nil {
+			return nil, fmt.Errorf("创建角色 %s 失败: %w", r.Name, err)
 		}
 		log.Printf("创建角色: %s", r.Name)
 		roleMap[r.Name] = &r
 	}
 
 	// 为角色分配权限
-	assignPermissionsToRoles(roleMap, permissions)
+	if err := assignPermissionsToRoles(roleMap, permissions); err != nil {
+		return nil, err
+	}
 
-	return roleMap
+	return roleMap, nil
 }
 
 // assignPermissionsToRoles 为角色分配权限
-func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[string]*model.Permission) {
+func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[string]*model.Permission) error {
 	// 超级管理员：无需分配权限，通过用户表的 IsSuperAdmin 字段标记
 
 	// 管理员：所有权限
@@ -322,7 +353,9 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 		for code := range permissions {
 			codes = append(codes, code)
 		}
-		assignRolePermissions("管理员", admin, permissions, codes)
+		if err := assignRolePermissions("管理员", admin, permissions, codes); err != nil {
+			return err
+		}
 	}
 
 	// 操作员：仅新增/修改/查询权限
@@ -337,7 +370,9 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			"task:log", "task:log:read",
 			"system:setting", "system:setting:read", "system:setting:update",
 		}
-		assignRolePermissions("操作员", operator, permissions, operatorPermissions)
+		if err := assignRolePermissions("操作员", operator, permissions, operatorPermissions); err != nil {
+			return err
+		}
 	}
 
 	// 观察者：只有查看权限
@@ -352,49 +387,52 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			// 系统设置
 			"system:setting", "system:setting:read",
 		}
-		assignRolePermissions("观察者", observer, permissions, observerPermissions)
+		if err := assignRolePermissions("观察者", observer, permissions, observerPermissions); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // assignRolePermissions 对齐角色权限：缺失的补上，已不再授权的删除（脚本可重复执行）
-func assignRolePermissions(roleName string, role *model.Role, permissions map[string]*model.Permission, codes []string) {
+func assignRolePermissions(roleName string, role *model.Role, permissions map[string]*model.Permission, codes []string) error {
+	// 目标列表为空时直接失败，避免误删该角色的全部授权
+	if len(codes) == 0 {
+		return fmt.Errorf("角色 %s 的目标权限列表为空，终止对齐", roleName)
+	}
 	rolePermissions := make([]model.RolePermission, 0, len(codes))
 	ids := make([]uint, 0, len(codes))
 	for _, code := range codes {
-		if p, exists := permissions[code]; exists {
-			rolePermissions = append(rolePermissions, model.RolePermission{
-				RoleID:       role.ID,
-				PermissionID: p.ID,
-			})
-			ids = append(ids, p.ID)
+		p, exists := permissions[code]
+		if !exists {
+			// 目标权限不存在说明脚本定义有误，此时不能继续删除，否则会误清已有授权
+			return fmt.Errorf("角色 %s 的目标权限 %s 不存在", roleName, code)
 		}
+		rolePermissions = append(rolePermissions, model.RolePermission{
+			RoleID:       role.ID,
+			PermissionID: p.ID,
+		})
+		ids = append(ids, p.ID)
 	}
 	// 删除该角色上不在本次授权列表内的关联
-	tx := postgres.DB.Where("role_id = ?", role.ID)
-	if len(ids) > 0 {
-		tx = tx.Where("permission_id NOT IN ?", ids)
+	if err := db.Where("role_id = ? AND permission_id NOT IN ?", role.ID, ids).
+		Delete(&model.RolePermission{}).Error; err != nil {
+		return fmt.Errorf("清理%s的多余权限失败: %w", roleName, err)
 	}
-	if err := tx.Delete(&model.RolePermission{}).Error; err != nil {
-		log.Printf("清理%s的多余权限失败: %v", roleName, err)
-		return
-	}
-	if len(rolePermissions) == 0 {
-		log.Printf("为%s对齐了 0 个权限", roleName)
-		return
-	}
-	if err := postgres.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePermissions).Error; err != nil {
-		log.Printf("为%s分配权限失败: %v", roleName, err)
-		return
+	// role_permissions 以 (role_id, permission_id) 为主键，重复关联直接忽略
+	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePermissions).Error; err != nil {
+		return fmt.Errorf("为%s分配权限失败: %w", roleName, err)
 	}
 	log.Printf("为%s对齐了 %d 个权限", roleName, len(rolePermissions))
+	return nil
 }
 
 // pruneStalePermissions 回收脚本定义中已删除的权限，默认只打印，带 --prune 时删除
-func pruneStalePermissions(permissions map[string]*model.Permission) {
+// permissions 必须是完整同步成功的权限清单，否则正常权限会被误判为失效
+func pruneStalePermissions(permissions map[string]*model.Permission) error {
 	var all []model.Permission
-	if err := postgres.DB.Find(&all).Error; err != nil {
-		log.Printf("查询已有权限失败: %v", err)
-		return
+	if err := db.Find(&all).Error; err != nil {
+		return fmt.Errorf("查询已有权限失败: %w", err)
 	}
 	stale := make([]model.Permission, 0)
 	for _, p := range all {
@@ -403,14 +441,14 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 		}
 	}
 	if len(stale) == 0 {
-		return
+		return nil
 	}
 	prune := len(os.Args) > 1 && os.Args[1] == "--prune"
 	if !prune {
 		for _, p := range stale {
 			log.Printf("提示：权限 %s（%s）已不在脚本定义中，如需删除请带 --prune 参数执行", p.Code, p.Name)
 		}
-		return
+		return nil
 	}
 	// 父级失效时其下子权限一并回收
 	childrenOf := make(map[uint][]uint)
@@ -458,44 +496,49 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 				batch = append(batch, id)
 			}
 		}
-		if err := postgres.DB.Where("id IN ?", batch).Delete(&model.Permission{}).Error; err != nil {
-			log.Printf("删除失效权限失败: %v", err)
-			return
+		if err := db.Where("id IN ?", batch).Delete(&model.Permission{}).Error; err != nil {
+			return fmt.Errorf("删除失效权限失败: %w", err)
 		}
 		for _, id := range batch {
 			delete(pending, id)
 		}
 	}
 	log.Printf("已回收 %d 个失效权限", len(deadIDs))
-
+	return nil
 }
 
 // createDefaultAdmin 创建默认管理员用户
-func createDefaultAdmin(roles map[string]*model.Role) {
+func createDefaultAdmin() error {
 	// 检查管理员用户是否已存在
 	var existingUser model.User
-	if err := postgres.DB.Where("username = ?", "admin").Limit(1).Find(&existingUser).Error; err == nil && existingUser.Username != "" {
+	if err := db.Where("username = ?", "admin").Limit(1).Find(&existingUser).Error; err != nil {
+		return fmt.Errorf("查询管理员用户失败: %w", err)
+	}
+	if existingUser.Username != "" {
+		if !existingUser.IsSuperAdmin {
+			// 不自动提升已有账号，交由人工确认，避免意外提权
+			log.Printf("警告：admin 用户已存在但不是超级管理员，请人工确认其权限状态")
+			return nil
+		}
 		log.Println("管理员用户已存在，跳过创建")
-		return
+		return nil
 	}
 
 	// 从环境变量获取管理员密码
 	initialPassword := os.Getenv("ADMIN_PASSWORD")
 	if initialPassword == "" {
-		log.Printf("请设置环境变量 ADMIN_PASSWORD")
-		return
+		log.Printf("未设置环境变量 ADMIN_PASSWORD，跳过创建管理员用户")
+		return nil
 	}
 
 	if len(initialPassword) < 8 {
-		log.Printf("密码长度不能少于8位")
-		return
+		return fmt.Errorf("ADMIN_PASSWORD 长度不能少于8位")
 	}
 
 	// 加密密码
 	hashedPassword, err := crypto.HashPassword(initialPassword)
 	if err != nil {
-		log.Printf("密码加密失败: %v", err)
-		return
+		return fmt.Errorf("密码加密失败: %w", err)
 	}
 
 	// 创建超级管理员用户
@@ -508,11 +551,11 @@ func createDefaultAdmin(roles map[string]*model.Role) {
 		IsSuperAdmin: true,
 	}
 
-	if err := postgres.DB.Create(&admin).Error; err != nil {
-		log.Printf("创建管理员用户失败: %v", err)
-		return
+	if err := db.Create(&admin).Error; err != nil {
+		return fmt.Errorf("创建管理员用户失败: %w", err)
 	}
 
 	log.Println("创建默认超级管理员用户成功！")
 	log.Println("用户名: admin")
+	return nil
 }
