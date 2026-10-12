@@ -10,6 +10,12 @@ const (
 	TaskTypeSystem = "system"
 )
 
+// 任务日志状态
+const (
+	TaskStatusSuccess = "success"
+	TaskStatusFailed  = "failed"
+)
+
 type TaskLog struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	TaskName  string    `gorm:"size:255" json:"task_name"`      // 任务名称

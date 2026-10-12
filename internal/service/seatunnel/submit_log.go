@@ -68,7 +68,7 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 
 // WriteTaskLog 写入作业日志（提交成功）
 func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
-	WriteTaskLogWithStatus(task, octoopsRespBody, "success")
+	WriteTaskLogWithStatus(task, octoopsRespBody, taskModel.TaskStatusSuccess)
 }
 
 // UpdateJobIdFromResponse 从响应体中提取 jobId 并更新到数据库

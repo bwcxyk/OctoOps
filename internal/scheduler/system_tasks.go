@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"octoops/internal/infra/postgres"
 	systemModel "octoops/internal/model/system"
@@ -115,6 +116,17 @@ func DisableSystemTask(taskType string) {
 	log.Printf("[Scheduler][系统任务] 已移除调度: %s", taskType)
 }
 
+// runSystemTask 执行系统任务并捕获 panic，避免异常直接中断调度 goroutine 导致日志缺失
+func runSystemTask(task *SystemTask) (result string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Scheduler][Panic] 系统任务异常 type=%s, name=%s, err=%v", task.Type, task.Name, r)
+			err = fmt.Errorf("任务执行异常: %v", r)
+		}
+	}()
+	return task.Job()
+}
+
 func registerSystemTask(def SystemTaskDef, cronExpr string) bool {
 	if cronScheduler == nil {
 		log.Printf("[Scheduler][系统任务] 调度器未初始化，跳过注册: %s", def.Type)
@@ -146,7 +158,12 @@ func addSystemTaskToCron(task *SystemTask) {
 		mapsMu.Lock()
 		task.LastRun = time.Now()
 		mapsMu.Unlock()
-		result := task.Job()
+		result, runErr := runSystemTask(task)
+		status := taskModel.TaskStatusSuccess
+		if runErr != nil {
+			status = taskModel.TaskStatusFailed
+			result = runErr.Error()
+		}
 		mapsMu.Lock()
 		task.LastResult = result
 		if currentEntryID != 0 {
@@ -159,7 +176,7 @@ func addSystemTaskToCron(task *SystemTask) {
 			TaskName: task.Name,
 			TaskType: taskModel.TaskTypeSystem,
 			Result:   result,
-			Status:   "success",
+			Status:   status,
 		})
 	}
 	entryID, err := cronScheduler.AddFunc(task.Spec, jobFunc)
@@ -178,21 +195,16 @@ func addSystemTaskToCron(task *SystemTask) {
 	)
 }
 
-// GetJobFuncByType 返回系统任务的执行函数
-func GetJobFuncByType(taskType string) func() string {
+// GetJobFuncByType 返回系统任务的执行函数，返回展示结果与错误
+func GetJobFuncByType(taskType string) func() (string, error) {
 	switch taskType {
 	case "ecs_sg_sync":
-		return func() string {
-			return aliyunService.SyncECSSecurityGroups()
-		}
+		return aliyunService.SyncECSSecurityGroups
 	case "job_status_sync":
-		return func() string {
-			seatunnelService.SyncAllJobStatus()
-			return "作业状态同步完成"
-		}
+		return seatunnelService.SyncAllJobStatus
 	default:
-		return func() string {
-			return "系统任务执行完成"
+		return func() (string, error) {
+			return "系统任务执行完成", nil
 		}
 	}
 }

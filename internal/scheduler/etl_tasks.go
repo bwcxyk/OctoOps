@@ -5,6 +5,7 @@ import (
 	"log"
 	"octoops/internal/infra/postgres"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	taskModel "octoops/internal/model/task"
 	seatunnelService "octoops/internal/service/seatunnel"
 	"time"
 )
@@ -89,7 +90,7 @@ func executeTask(task seatunnelModel.EtlTask) {
 	respBody, err := seatunnelService.SubmitJobInternal(task.ID, false)
 	if err != nil {
 		log.Printf("执行定时任务失败: ID=%d, 名称=%s, 错误=%v", task.ID, task.Name, err)
-		seatunnelService.WriteTaskLogWithStatus(task, []byte(err.Error()), "failed")
+		seatunnelService.WriteTaskLogWithStatus(task, []byte(err.Error()), taskModel.TaskStatusFailed)
 		return
 	}
 

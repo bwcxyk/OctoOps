@@ -170,8 +170,13 @@ func StopJob(c *gin.Context) {
 // 手动触发同步所有任务 job_status
 func SyncJobStatus(c *gin.Context) {
 	log.Printf("[ETL] 触发同步作业状态 /api/seatunnel/tasks/sync-status")
-	seatunnel.SyncAllJobStatus()
-	c.JSON(http.StatusOK, gin.H{"message": "同步作业状态已触发"})
+	result, err := seatunnel.SyncAllJobStatus()
+	if err != nil {
+		log.Printf("[ETL] 同步作业状态失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": result})
 }
 
 func RegisterStreamTaskRoutes(r *gin.RouterGroup) {

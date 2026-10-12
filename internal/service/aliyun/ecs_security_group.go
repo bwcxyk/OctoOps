@@ -217,13 +217,14 @@ func SyncAllECSSecurityGroups() error {
 }
 
 // 封装统一同步函数
-func SyncECSSecurityGroups() string {
+// SyncECSSecurityGroups 同步全部 ECS 安全组，返回执行结果与错误
+func SyncECSSecurityGroups() (string, error) {
 	log.Printf("[Scheduler] 开始同步ECS安全组")
 	err := SyncAllECSSecurityGroups()
 	if err != nil {
 		log.Printf("[Scheduler] ECS安全组同步失败: %v", err)
-		return "ECS安全组同步失败: " + err.Error()
+		return "", fmt.Errorf("ECS安全组同步失败: %w", err)
 	}
 	log.Printf("[Scheduler] ECS安全组同步完成")
-	return "ECS安全组同步完成"
+	return "ECS安全组同步完成", nil
 }
