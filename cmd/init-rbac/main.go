@@ -412,25 +412,66 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 		}
 		return
 	}
-	staleIDs := make([]uint, 0, len(stale))
+	// 父级失效时其下子权限一并回收
+	childrenOf := make(map[uint][]uint)
+	for _, p := range all {
+		if p.ParentID != 0 {
+			childrenOf[p.ParentID] = append(childrenOf[p.ParentID], p.ID)
+		}
+	}
+	dead := make(map[uint]bool, len(stale))
+	var markDead func(id uint)
+	markDead = func(id uint) {
+		if dead[id] {
+			return
+		}
+		dead[id] = true
+		for _, cid := range childrenOf[id] {
+			markDead(cid)
+		}
+	}
 	for _, p := range stale {
-		staleIDs = append(staleIDs, p.ID)
+		markDead(p.ID)
 	}
 
-	// 先解除角色关联，再删除权限（子权限在前，避免父级外键约束）
-	if err := postgres.DB.Where("permission_id IN ?", staleIDs).Delete(&model.RolePermission{}).Error; err != nil {
+	// 先解除角色关联
+	deadIDs := make([]uint, 0, len(dead))
+	for id := range dead {
+		deadIDs = append(deadIDs, id)
+	}
+	if err := postgres.DB.Where("permission_id IN ?", deadIDs).Delete(&model.RolePermission{}).Error; err != nil {
 		log.Printf("解除失效权限的角色关联失败: %v", err)
 		return
 	}
-	if err := postgres.DB.Where("id IN ? AND parent_id <> 0", staleIDs).Delete(&model.Permission{}).Error; err != nil {
-		log.Printf("删除失效子权限失败: %v", err)
-		return
+
+	// 自底向上删除，避免父级外键约束
+	pending := make(map[uint]bool, len(dead))
+	for id := range dead {
+		pending[id] = true
 	}
-	if err := postgres.DB.Where("id IN ?", staleIDs).Delete(&model.Permission{}).Error; err != nil {
-		log.Printf("删除失效权限失败: %v", err)
-		return
+	for len(pending) > 0 {
+		batch := make([]uint, 0)
+		for id := range pending {
+			hasChild := false
+			for _, cid := range childrenOf[id] {
+				if pending[cid] {
+					hasChild = true
+					break
+				}
+			}
+			if !hasChild {
+				batch = append(batch, id)
+			}
+		}
+		if err := postgres.DB.Where("id IN ?", batch).Delete(&model.Permission{}).Error; err != nil {
+			log.Printf("删除失效权限失败: %v", err)
+			return
+		}
+		for _, id := range batch {
+			delete(pending, id)
+		}
 	}
-	log.Printf("已回收 %d 个失效权限", len(stale))
+	log.Printf("已回收 %d 个失效权限", len(deadIDs))
 
 }
 
