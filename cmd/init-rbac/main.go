@@ -291,7 +291,7 @@ func createDefaultRoles(permissions map[string]*model.Permission) map[string]*mo
 	for _, r := range roles {
 		// 检查角色是否已存在
 		var existing model.Role
-		if err := postgres.DB.Where("name = ?", r.Name).First(&existing).Error; err == nil {
+		if err := postgres.DB.Where("name = ?", r.Name).Limit(1).Find(&existing).Error; err == nil && existing.Name != "" {
 			log.Printf("角色 %s 已存在，跳过创建", r.Name)
 			roleMap[r.Name] = &existing
 			continue
@@ -437,7 +437,7 @@ func pruneStalePermissions(permissions map[string]*model.Permission) {
 func createDefaultAdmin(roles map[string]*model.Role) {
 	// 检查管理员用户是否已存在
 	var existingUser model.User
-	if err := postgres.DB.Where("username = ?", "admin").First(&existingUser).Error; err == nil {
+	if err := postgres.DB.Where("username = ?", "admin").Limit(1).Find(&existingUser).Error; err == nil && existingUser.Username != "" {
 		log.Println("管理员用户已存在，跳过创建")
 		return
 	}
