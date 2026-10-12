@@ -37,8 +37,11 @@ func main() {
 	// 创建与菜单一致的权限树
 	permissions := createMenuLikePermissions()
 
-	// 创建默认角色
+	// 创建默认角色并对齐权限
 	roles := createDefaultRoles(permissions)
+
+	// 回收脚本中已删除的权限：默认只提示，带 --prune 参数才实际删除
+	pruneStalePermissions(permissions)
 
 	// 创建默认管理员用户
 	createDefaultAdmin(roles)
@@ -353,25 +356,81 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 	}
 }
 
-// assignRolePermissions 批量分配角色权限，已存在的关系跳过（脚本可重复执行）
+// assignRolePermissions 对齐角色权限：缺失的补上，已不再授权的删除（脚本可重复执行）
 func assignRolePermissions(roleName string, role *model.Role, permissions map[string]*model.Permission, codes []string) {
 	rolePermissions := make([]model.RolePermission, 0, len(codes))
+	ids := make([]uint, 0, len(codes))
 	for _, code := range codes {
 		if p, exists := permissions[code]; exists {
 			rolePermissions = append(rolePermissions, model.RolePermission{
 				RoleID:       role.ID,
 				PermissionID: p.ID,
 			})
+			ids = append(ids, p.ID)
 		}
 	}
+	// 删除该角色上不在本次授权列表内的关联
+	tx := postgres.DB.Where("role_id = ?", role.ID)
+	if len(ids) > 0 {
+		tx = tx.Where("permission_id NOT IN ?", ids)
+	}
+	if err := tx.Delete(&model.RolePermission{}).Error; err != nil {
+		log.Printf("清理%s的多余权限失败: %v", roleName, err)
+		return
+	}
 	if len(rolePermissions) == 0 {
+		log.Printf("为%s对齐了 0 个权限", roleName)
 		return
 	}
 	if err := postgres.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePermissions).Error; err != nil {
 		log.Printf("为%s分配权限失败: %v", roleName, err)
 		return
 	}
-	log.Printf("为%s同步了 %d 个权限（已存在则跳过）", roleName, len(rolePermissions))
+	log.Printf("为%s对齐了 %d 个权限", roleName, len(rolePermissions))
+}
+
+// pruneStalePermissions 回收脚本定义中已删除的权限，默认只打印，带 --prune 时删除
+func pruneStalePermissions(permissions map[string]*model.Permission) {
+	var all []model.Permission
+	if err := postgres.DB.Find(&all).Error; err != nil {
+		log.Printf("查询已有权限失败: %v", err)
+		return
+	}
+	stale := make([]model.Permission, 0)
+	for _, p := range all {
+		if _, ok := permissions[p.Code]; !ok {
+			stale = append(stale, p)
+		}
+	}
+	if len(stale) == 0 {
+		return
+	}
+	prune := len(os.Args) > 1 && os.Args[1] == "--prune"
+	if !prune {
+		for _, p := range stale {
+			log.Printf("提示：权限 %s（%s）已不在脚本定义中，如需删除请带 --prune 参数执行", p.Code, p.Name)
+		}
+		return
+	}
+	staleIDs := make([]uint, 0, len(stale))
+	for _, p := range stale {
+		log.Printf("回收权限: %s（%s）", p.Code, p.Name)
+		staleIDs = append(staleIDs, p.ID)
+	}
+	// 先解除角色关联，再删除权限（子权限在前，避免父级外键约束）
+	if err := postgres.DB.Where("permission_id IN ?", staleIDs).Delete(&model.RolePermission{}).Error; err != nil {
+		log.Printf("解除失效权限的角色关联失败: %v", err)
+		return
+	}
+	if err := postgres.DB.Where("id IN ? AND parent_id <> 0", staleIDs).Delete(&model.Permission{}).Error; err != nil {
+		log.Printf("删除失效子权限失败: %v", err)
+		return
+	}
+	if err := postgres.DB.Where("id IN ?", staleIDs).Delete(&model.Permission{}).Error; err != nil {
+		log.Printf("删除失效权限失败: %v", err)
+		return
+	}
+	log.Printf("已回收 %d 个失效权限", len(stale))
 }
 
 // createDefaultAdmin 创建默认管理员用户
