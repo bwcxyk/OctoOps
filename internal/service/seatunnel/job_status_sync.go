@@ -7,26 +7,33 @@ import (
 	seatunnelModel "octoops/internal/model/seatunnel"
 )
 
-func SyncAllJobStatus() {
+// SyncAllJobStatus 同步全部实时作业状态，返回执行结果与错误
+func SyncAllJobStatus() (string, error) {
 	log.Printf("[Scheduler] 开始同步作业状态")
 	var tasks []seatunnelModel.EtlTask
-	postgres.DB.Where("task_type = ?", "stream").Find(&tasks)
-	for _, task := range tasks {
-		if task.JobID != nil && *task.JobID != "" {
-			oldStatus := task.JobStatus
-			result := QuerySeatunnelJobStatus(*task.JobID)
-			status := result.JobStatus
-			postgres.DB.Model(&task).Update("job_status", status)
-			if result.FinishTime != "" {
-				postgres.DB.Model(&task).Update("finish_time", result.FinishTime)
-			}
-			// 状态变为FAILED，alert_group不为空则通知
-			if oldStatus != "FAILED" && status == "FAILED" {
-				SendTaskAlert(task, status)
-			}
-		}
+	if err := postgres.DB.Where("task_type = ?", "stream").Find(&tasks).Error; err != nil {
+		return "", fmt.Errorf("查询实时作业失败: %w", err)
 	}
-	log.Printf("[Scheduler] 完成同步作业状态")
+	synced := 0
+	for _, task := range tasks {
+		if task.JobID == nil || *task.JobID == "" {
+			continue
+		}
+		oldStatus := task.JobStatus
+		result := QuerySeatunnelJobStatus(*task.JobID)
+		status := result.JobStatus
+		postgres.DB.Model(&task).Update("job_status", status)
+		if result.FinishTime != "" {
+			postgres.DB.Model(&task).Update("finish_time", result.FinishTime)
+		}
+		// 状态变为FAILED，alert_group不为空则通知
+		if oldStatus != "FAILED" && status == "FAILED" {
+			SendTaskAlert(task, status)
+		}
+		synced++
+	}
+	log.Printf("[Scheduler] 完成同步作业状态，共 %d 个作业", synced)
+	return fmt.Sprintf("作业状态同步完成，共 %d 个作业", synced), nil
 }
 
 // SyncJobStatusByTaskID 同步单个任务作业状态并回写数据库

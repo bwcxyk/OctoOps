@@ -325,12 +325,12 @@ async function doSubmitJob() {
       isStartWithSavePoint: isStartWithSavePoint.value,
     });
     MessagePlugin.success('提交作业成功');
-    submitDialogVisible.value = false;
     await fetchTasks();
   } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error(error instanceof Error ? error.message : '提交作业失败');
+    MessagePlugin.error('提交作业失败');
   } finally {
+    submitDialogVisible.value = false;
     actionLoading.value = false;
   }
 }
@@ -344,12 +344,12 @@ async function doStopJob() {
       isStopWithSavePoint: isStopWithSavePoint.value,
     });
     MessagePlugin.success('停止作业成功');
-    stopDialogVisible.value = false;
     await fetchTasks();
   } catch (error: unknown) {
     console.error(error);
-    MessagePlugin.error(error instanceof Error ? error.message : '停止作业失败');
+    MessagePlugin.error('停止作业失败');
   } finally {
+    stopDialogVisible.value = false;
     actionLoading.value = false;
   }
 }

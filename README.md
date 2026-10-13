@@ -8,7 +8,8 @@
 
 ## 功能概览
 
-- 任务中心：调度器、自定义任务、任务日志
+- 任务中心：调度器、任务日志
+- 系统设置 → 基本设置：系统任务（作业状态同步、ECS 安全组同步）开关与调度周期、邮件通知、日志保留
 - 数据集成：基于 SeaTunnel 实现流批一体的数据同步与作业编排，通过 [REST API V2](https://seatunnel.incubator.apache.org/docs/engines/zeta/rest-api-v2) 对接执行能力
 - 云资源：阿里云相关能力
 - 告警体系：告警渠道、告警组、告警模板
@@ -105,7 +106,7 @@ npm run dev
 - `octoops.server.port`：后端服务监听端口
 - `octoops.redis`：Redis 配置（必需，用于密码找回验证码与限流存储）
 - `seatunnel.base_url`：SeaTunnel API 地址
-- `octoops.aliyun.aes_key`：阿里云密钥加密用 AES Key（32 字节）
+- `octoops.security.aes_key`：通用 AES Key（32 字节），用于阿里云 AccessSecret、邮件 SMTP 密码等敏感信息的加解密，部署后请勿随意变更
 
 ## 项目结构
 

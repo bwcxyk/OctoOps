@@ -15,12 +15,13 @@ func InitScheduler() {
 	schedulerRunning.Store(true)
 	mapsMu.Lock()
 	taskEntryMap = make(map[uint]cron.EntryID)
-	customTasks = map[uint]*CustomTask{}
+	systemTasks = map[string]*SystemTask{}
 	etlTasksMap = map[uint]*seatunnelModel.EtlTask{}
 	mapsMu.Unlock()
 
-	loadCustomTasksFromDB()
+	loadSystemTasksFromSettings()
 	loadActiveTasks()
+	registerMaintenanceTasks()
 
 	log.Println("定时任务调度器已启动")
 }
@@ -46,20 +47,20 @@ func reloadTasks() {
 	for _, entryID := range taskEntryMap {
 		entryIDs = append(entryIDs, entryID)
 	}
-	for _, t := range customTasks {
+	for _, t := range systemTasks {
 		if t.EntryID != 0 {
 			entryIDs = append(entryIDs, t.EntryID)
 		}
 	}
 	taskEntryMap = make(map[uint]cron.EntryID)
-	customTasks = map[uint]*CustomTask{}
+	systemTasks = map[string]*SystemTask{}
 	etlTasksMap = map[uint]*seatunnelModel.EtlTask{}
 	mapsMu.Unlock()
 	for _, entryID := range entryIDs {
 		cronScheduler.Remove(entryID)
 	}
 
-	loadCustomTasksFromDB()
+	loadSystemTasksFromSettings()
 	loadActiveTasks()
 	cronScheduler.Start()
 	schedulerRunning.Store(true)
@@ -74,11 +75,17 @@ func GetSchedulerStatus() map[string]interface{} {
 		taskName := ""
 		taskType := ""
 		mapsMu.RLock()
-		for _, t := range customTasks {
+		for _, t := range systemTasks {
 			if t.EntryID == entry.ID {
 				taskName = t.Name
-				taskType = "custom"
+				taskType = "system"
 				break
+			}
+		}
+		if taskName == "" {
+			if name, ok := maintenanceEntries[entry.ID]; ok {
+				taskName = name
+				taskType = "system"
 			}
 		}
 		if taskName == "" {

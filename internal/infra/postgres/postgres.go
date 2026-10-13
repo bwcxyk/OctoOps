@@ -6,6 +6,7 @@ import (
 	aliyunModel "octoops/internal/model/aliyun"
 	rbacModel "octoops/internal/model/rbac"
 	seatunnelModel "octoops/internal/model/seatunnel"
+	systemModel "octoops/internal/model/system"
 	taskModel "octoops/internal/model/task"
 	"time"
 
@@ -44,8 +45,8 @@ func Migrate() error {
 		&alertModel.AlertGroup{},
 		&alertModel.AlertGroupMember{},
 		&alertModel.AlertTemplate{},
-		&taskModel.CustomTask{},
 		&taskModel.TaskLog{},
+		&systemModel.Setting{},
 		&rbacModel.User{},
 		&rbacModel.Role{},
 		&rbacModel.Permission{},

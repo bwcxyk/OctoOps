@@ -38,6 +38,7 @@ export interface TaskListResult {
 export interface TaskLogItem {
   id: number;
   task_name: string;
+  task_type?: string;
   status: string;
   message?: string;
   created_at?: string;

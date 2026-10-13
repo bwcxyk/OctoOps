@@ -10,6 +10,7 @@ import (
 	aliyunApi "octoops/internal/api/aliyun"
 	rbacApi "octoops/internal/api/rbac"
 	seatunnelApi "octoops/internal/api/seatunnel"
+	systemApi "octoops/internal/api/system"
 	taskApi "octoops/internal/api/task"
 	"octoops/internal/assets"
 	"octoops/internal/config"
@@ -44,7 +45,7 @@ func main() {
 	if err := infraRedis.Init(redisCfg); err != nil {
 		log.Fatalf("初始化Redis失败: %v", err)
 	}
-	scheduler.InitScheduler() // 初始化定时任务
+	scheduler.InitScheduler() // 初始化定时任务（按设置项注册系统任务，未配置的项不注册）
 
 	// 初始化 Gin 引擎
 	r := gin.New()
@@ -57,7 +58,7 @@ func main() {
 	rbacApi.RegisterAuthRoutes(apiGroup)
 
 	// 需要认证的路由
-	taskApi.RegisterCustomTaskRoutes(apiGroup)
+	systemApi.RegisterSystemRoutes(apiGroup)
 	taskApi.RegisterSchedulerRoutes(apiGroup)
 	taskApi.RegisterTaskLogRoutes(apiGroup)
 	seatunnelApi.RegisterStreamTaskRoutes(apiGroup)

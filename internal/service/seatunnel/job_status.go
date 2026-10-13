@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"octoops/internal/config"
-	"time"
 )
 
 // JobStatusResult Seatunnel 作业状态结构体
@@ -21,7 +20,7 @@ type JobStatusResult struct {
 // QuerySeatunnelJobStatus 查询 seatunnel 作业状态
 func QuerySeatunnelJobStatus(jobId string) JobStatusResult {
 	url := config.SeatunnelBaseURL + "/job-info/" + jobId
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: config.SeatunnelRequestTimeout}
 	resp, err := client.Get(url)
 	if err != nil {
 		return JobStatusResult{JobStatus: "UNKNOWN"}

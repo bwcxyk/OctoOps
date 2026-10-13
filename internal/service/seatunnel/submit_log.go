@@ -14,7 +14,6 @@ import (
 	taskModel "octoops/internal/model/task"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // SubmitJobInternal 内部提交作业方法
@@ -46,10 +45,10 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 	}
 	requestURL := config.SeatunnelBaseURL + "/submit-job?" + params.Encode()
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: config.SeatunnelRequestTimeout}
 	resp, err := client.Post(requestURL, "text/plain; charset=utf-8", strings.NewReader(task.Config))
 	if err != nil {
-		return nil, fmt.Errorf("提交作业失败: %v", err)
+		return nil, NewUpstreamRequestError("提交作业", err)
 	}
 	defer func(body io.ReadCloser) {
 		closeErr := body.Close()
@@ -60,7 +59,8 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return respBody, fmt.Errorf("提交作业失败，状态码: %d, 响应: %s", resp.StatusCode, string(respBody))
+		log.Printf("[ETL] 提交作业返回异常状态码: taskID=%d, statusCode=%d, response=%s", taskID, resp.StatusCode, string(respBody))
+		return respBody, NewUpstreamError("提交作业", resp.StatusCode, respBody)
 	}
 
 	return respBody, nil
@@ -68,7 +68,7 @@ func SubmitJobInternal(taskID uint, isStartWithSavePoint bool) ([]byte, error) {
 
 // WriteTaskLog 写入作业日志（提交成功）
 func WriteTaskLog(task seatunnelModel.EtlTask, octoopsRespBody []byte) {
-	WriteTaskLogWithStatus(task, octoopsRespBody, "success")
+	WriteTaskLogWithStatus(task, octoopsRespBody, taskModel.TaskStatusSuccess)
 }
 
 // UpdateJobIdFromResponse 从响应体中提取 jobId 并更新到数据库
@@ -120,6 +120,7 @@ func WriteTaskLogWithStatus(task seatunnelModel.EtlTask, octoopsRespBody []byte,
 	}
 	postgres.DB.Create(&taskModel.TaskLog{
 		TaskName: taskName,
+		TaskType: taskModel.TaskTypeETL,
 		Result:   string(octoopsRespBody),
 		Status:   status,
 	})

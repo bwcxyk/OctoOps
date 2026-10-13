@@ -187,16 +187,17 @@ func HasRole(user *model.User, roleName string) bool {
 
 // GetUserPermissions 获取用户所有权限
 func GetUserPermissions(user *model.User) []string {
-	// 超级管理员返回所有权限
+	// 超级管理员拥有全部权限：除已有的权限码外额外返回 all，
+	// 前端菜单依赖该标记展示所有菜单，避免新增菜单在权限种子补齐前对超管不可见
 	if user.IsSuperAdmin {
+		permissions := []string{"all"}
 		var allPermissions []model.Permission
 		if err := postgres.DB.Where("status = ?", 1).Find(&allPermissions).Error; err == nil {
-			permissions := make([]string, 0, len(allPermissions))
 			for _, p := range allPermissions {
 				permissions = append(permissions, p.Code)
 			}
-			return permissions
 		}
+		return permissions
 	}
 
 	var permissions []string
