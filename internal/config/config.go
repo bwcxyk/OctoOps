@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,8 @@ func (p PostgresConfig) DSN() string {
 
 type SeatunnelConfig struct {
 	BaseURL string `yaml:"base_url"`
+	// RequestTimeout 调用 SeaTunnel 接口的超时时间，单位秒，默认 5
+	RequestTimeout int `yaml:"request_timeout"`
 }
 
 // SecurityConfig 通用安全配置，用于各类敏感信息（阿里云密钥、邮件密码等）的对称加密
@@ -66,12 +69,13 @@ type Config struct {
 }
 
 var (
-	SeatunnelBaseURL string
-	PostgresDSN      string
-	aesKey           string
-	jwtSecret        string
-	serverPort       int
-	redisConfig      RedisConfig
+	SeatunnelBaseURL        string
+	SeatunnelRequestTimeout time.Duration
+	PostgresDSN             string
+	aesKey                  string
+	jwtSecret               string
+	serverPort              int
+	redisConfig             RedisConfig
 )
 
 func overrideStringField(envVar string, field *string) {
@@ -121,6 +125,7 @@ func InitConfig() error {
 
 	// Seatunnel
 	overrideStringField("SEATUNNEL_BASE_URL", &cfg.Seatunnel.BaseURL)
+	overrideIntField("SEATUNNEL_REQUEST_TIMEOUT", &cfg.Seatunnel.RequestTimeout)
 
 	// Octoops.Security
 	overrideStringField("OCTOOPS_SECURITY_AES_KEY", &cfg.Octoops.Security.AesKey)
@@ -144,6 +149,10 @@ func InitConfig() error {
 	}
 
 	SeatunnelBaseURL = cfg.Seatunnel.BaseURL
+	if cfg.Seatunnel.RequestTimeout <= 0 {
+		cfg.Seatunnel.RequestTimeout = 5
+	}
+	SeatunnelRequestTimeout = time.Duration(cfg.Seatunnel.RequestTimeout) * time.Second
 	PostgresDSN = cfg.Postgres.DSN()
 	aesKey = cfg.Octoops.Security.AesKey
 	jwtSecret = cfg.Octoops.Auth.JWTSecret
@@ -180,4 +189,3 @@ func GetServerPort() int {
 func GetRedisConfig() RedisConfig {
 	return redisConfig
 }
-

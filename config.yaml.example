@@ -28,3 +28,4 @@ postgres:
 # SeaTunnel 服务相关配置
 seatunnel:
   base_url: "http://your-seatunnel-url"  # SeaTunnel API 服务地址
+  request_timeout: 5  # 调用 SeaTunnel 接口的超时时间（秒），不填默认 5

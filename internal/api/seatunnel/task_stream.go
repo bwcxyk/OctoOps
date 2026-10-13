@@ -1,6 +1,8 @@
 package seatunnel
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -49,6 +51,36 @@ func requireTaskActionPermission(c *gin.Context, taskType, action string) bool {
 	return true
 }
 
+// writeUpstreamError 输出上游错误：error 为给前端展示的短文案，detail 为上游状态码与原始响应
+func writeUpstreamError(c *gin.Context, message string, err error) {
+	body := gin.H{"error": message}
+
+	var upstreamErr *seatunnel.UpstreamError
+	if errors.As(err, &upstreamErr) {
+		detail := gin.H{}
+		if upstreamErr.StatusCode > 0 {
+			detail["status_code"] = upstreamErr.StatusCode
+		}
+		if upstreamErr.Err != nil {
+			detail["reason"] = upstreamErr.Err.Error()
+		}
+		if len(upstreamErr.Body) > 0 {
+			// 上游返回 JSON 时解析成对象，避免再套一层转义字符串
+			var parsed interface{}
+			if json.Unmarshal(upstreamErr.Body, &parsed) == nil {
+				detail["response"] = parsed
+			} else {
+				detail["response"] = string(upstreamErr.Body)
+			}
+		}
+		body["detail"] = detail
+	} else {
+		body["detail"] = err.Error()
+	}
+
+	c.JSON(http.StatusInternalServerError, body)
+}
+
 // 提交作业
 func SubmitJob(c *gin.Context) {
 	id := c.Param("id")
@@ -90,7 +122,7 @@ func SubmitJob(c *gin.Context) {
 	respBody, err := seatunnel.SubmitJobInternal(taskID, isStartWithSavePoint)
 	if err != nil {
 		log.Printf("[ETL] 提交作业失败: taskID=%d, type=%s, error=%v", taskID, task.TaskType, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "提交作业失败"})
+		writeUpstreamError(c, "提交作业失败", err)
 		return
 	}
 
@@ -139,18 +171,18 @@ func StopJob(c *gin.Context) {
 	}
 	body := fmt.Sprintf(`{"jobId": "%s", "isStopWithSavePoint": %s}`, *task.JobID, isStopWithSavePoint)
 	url := config.SeatunnelBaseURL + "/stop-job"
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: config.SeatunnelRequestTimeout}
 	resp, err := client.Post(url, "application/json", strings.NewReader(body))
 	if err != nil {
 		log.Printf("[ETL] 停止作业失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Seatunnel 服务，请检查服务是否已启动且网络正常"})
+		writeUpstreamError(c, "停止作业失败", seatunnel.NewUpstreamRequestError("停止作业", err))
 		return
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[ETL] 停止作业失败: taskID=%d, jobId=%s, statusCode=%d, response=%s", task.ID, *task.JobID, resp.StatusCode, string(respBody))
-		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), respBody)
+		writeUpstreamError(c, "停止作业失败", seatunnel.NewUpstreamError("停止作业", resp.StatusCode, respBody))
 		return
 	}
 
