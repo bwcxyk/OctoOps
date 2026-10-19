@@ -1,6 +1,7 @@
 package seatunnel
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"octoops/internal/infra/postgres"
@@ -15,16 +16,33 @@ func SyncAllJobStatus() (string, error) {
 		return "", fmt.Errorf("查询实时作业失败: %w", err)
 	}
 	synced := 0
+	failed := 0
 	for _, task := range tasks {
 		if task.JobID == nil || *task.JobID == "" {
 			continue
 		}
 		oldStatus := task.JobStatus
-		result := QuerySeatunnelJobStatus(*task.JobID)
+		result, err := QuerySeatunnelJobStatus(*task.JobID)
+		if err != nil {
+			log.Printf("[Scheduler] 查询作业状态失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
+			failed++
+			continue
+		}
 		status := result.JobStatus
-		postgres.DB.Model(&task).Update("job_status", status)
+		if status == "" {
+			log.Printf("[Scheduler] 作业状态为空，跳过更新: taskID=%d, jobId=%s", task.ID, *task.JobID)
+			failed++
+			continue
+		}
+		if err := postgres.DB.Model(&task).Update("job_status", status).Error; err != nil {
+			log.Printf("[Scheduler] 更新作业状态失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
+			failed++
+			continue
+		}
 		if result.FinishTime != "" {
-			postgres.DB.Model(&task).Update("finish_time", result.FinishTime)
+			if err := postgres.DB.Model(&task).Update("finish_time", result.FinishTime).Error; err != nil {
+				log.Printf("[Scheduler] 更新作业完成时间失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
+			}
 		}
 		// 状态变为FAILED，alert_group不为空则通知
 		if oldStatus != "FAILED" && status == "FAILED" {
@@ -32,7 +50,11 @@ func SyncAllJobStatus() (string, error) {
 		}
 		synced++
 	}
-	log.Printf("[Scheduler] 完成同步作业状态，共 %d 个作业", synced)
+	log.Printf("[Scheduler] 完成同步作业状态，成功 %d 个，失败 %d 个", synced, failed)
+	if failed > 0 {
+		msg := fmt.Sprintf("作业状态同步完成：成功 %d 个，失败 %d 个", synced, failed)
+		return msg, errors.New(msg)
+	}
 	return fmt.Sprintf("作业状态同步完成，共 %d 个作业", synced), nil
 }
 
@@ -47,10 +69,13 @@ func SyncJobStatusByTaskID(taskID uint) (string, error) {
 	}
 
 	oldStatus := task.JobStatus
-	result := QuerySeatunnelJobStatus(*task.JobID)
+	result, err := QuerySeatunnelJobStatus(*task.JobID)
+	if err != nil {
+		return "", err
+	}
 	status := result.JobStatus
 	if status == "" {
-		status = "UNKNOWN"
+		return "", fmt.Errorf("SeaTunnel 响应缺少 jobStatus")
 	}
 
 	updates := map[string]interface{}{
@@ -60,7 +85,7 @@ func SyncJobStatusByTaskID(taskID uint) (string, error) {
 		updates["finish_time"] = result.FinishTime
 	}
 	if err := postgres.DB.Model(&task).Updates(updates).Error; err != nil {
-		return "", fmt.Errorf("更新任务状态失败: %v", err)
+		return "", fmt.Errorf("更新任务状态失败: %w", err)
 	}
 
 	if oldStatus != "FAILED" && status == "FAILED" {
