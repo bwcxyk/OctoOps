@@ -17,9 +17,6 @@ const (
 	KeyMailSMTP             = "mail.smtp"
 )
 
-// MaskedSecret 敏感配置在返回给前端时的占位值
-const MaskedSecret = "******"
-
 // 任务日志保留天数默认值与"不清理"标记
 const (
 	DefaultTaskLogRetentionDays = 30
@@ -48,9 +45,9 @@ const (
 type MailSetting struct {
 	Enable       bool   `json:"enable"`
 	SMTPAddress  string `json:"smtp_address"`
-	SMTPPort     int    `json:"smtp_port"`
+	SMTPPort     int    `json:"smtp_port"` // 端口由前端配置，后端不设默认值
 	SMTPUser     string `json:"smtp_user"`
-	SMTPPassword string `json:"smtp_password"`
+	SMTPPassword string `json:"smtp_password,omitempty"`
 	DisplayName  string `json:"display_name"`
 	Security     string `json:"security"` // none / ssl / tls
 }
@@ -63,6 +60,3 @@ func ValidSecurity(security string) bool {
 	}
 	return false
 }
-
-// DefaultSMTPPort 未指定端口时的默认值
-const DefaultSMTPPort = 465

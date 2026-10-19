@@ -41,7 +41,7 @@
               <div class="section-body">
                 <p class="setting-desc">
                   用于告警通知与找回密码验证码邮件，关闭后不会发送任何邮件。出于安全考虑，已保存的密码不会回显，
-                  显示为 <code>******</code>，保持原样或留空表示不修改。
+                  留空表示不修改。
                 </p>
               </div>
             </div>
@@ -69,7 +69,7 @@
                 </div>
                 <div class="mail-field">
                   <span class="mail-label">密码 / 授权码</span>
-                  <t-input v-model="mailDraft.smtp_password" type="password" placeholder="未修改请保留原值" clearable />
+                  <t-input v-model="mailDraft.smtp_password" type="password" placeholder="留空表示不修改" clearable />
                 </div>
                 <div class="mail-field">
                   <span class="mail-label">发件人名称</span>
@@ -112,8 +112,8 @@
       </t-tabs>
 
       <div class="setting-actions">
-        <t-button theme="primary" :disabled="!dirty" :loading="saving" @click="onSubmit">提交</t-button>
-        <t-button variant="outline" :disabled="!dirty" @click="onReset">还原</t-button>
+        <t-button theme="primary" :disabled="!activeDirty" :loading="saving" @click="onSubmit">保存当前页</t-button>
+        <t-button variant="outline" :disabled="!activeDirty" @click="onReset">还原</t-button>
         <t-button
           v-if="activeTab === 'mail' && mailDraft.enable"
           variant="outline"
@@ -141,7 +141,7 @@ interface SettingItem {
   description: string;
 }
 
-// 系统任务设置项：后续新增任务在此登记（同时后端 service/system 里登记对应的默认值与校验）
+// 系统任务设置项：后续新增任务需与后端 scheduler.systemTaskDefs 保持一致
 const taskItems: SettingItem[] = [
   {
     key: 'task.job_status_sync',
@@ -154,8 +154,6 @@ const taskItems: SettingItem[] = [
     description: '定时同步阿里云 ECS 安全组规则，关闭后需手动触发同步',
   },
 ];
-
-const allItems = taskItems;
 
 // 当前设置分组
 const activeTab = ref('task');
@@ -211,20 +209,25 @@ function defaultValue(): TaskSettingValue {
 }
 
 const draft = reactive<Record<string, TaskSettingValue>>(
-  Object.fromEntries(allItems.map((item) => [item.key, defaultValue()])),
+  Object.fromEntries(taskItems.map((item) => [item.key, defaultValue()])),
 );
 const saved = ref<Record<string, TaskSettingValue>>(
-  Object.fromEntries(allItems.map((item) => [item.key, defaultValue()])),
+  Object.fromEntries(taskItems.map((item) => [item.key, defaultValue()])),
 );
 const loading = ref(false);
 const saving = ref(false);
 
-const dirty = computed(
-  () =>
-    allItems.some((item) => JSON.stringify(draft[item.key]) !== JSON.stringify(saved.value[item.key])) ||
-    retentionDays.value !== savedRetentionDays.value ||
-    JSON.stringify(mailDraft) !== JSON.stringify(savedMail.value),
+const taskDirty = computed(() =>
+  taskItems.some((item) => JSON.stringify(draft[item.key]) !== JSON.stringify(saved.value[item.key])),
 );
+const mailDirty = computed(() => JSON.stringify(mailDraft) !== JSON.stringify(savedMail.value));
+const logDirty = computed(() => retentionDays.value !== savedRetentionDays.value);
+// 三个分组各自保存，提交按钮只作用于当前 tab
+const activeDirty = computed(() => {
+  if (activeTab.value === 'mail') return mailDirty.value;
+  if (activeTab.value === 'log') return logDirty.value;
+  return taskDirty.value;
+});
 
 function getErrorMessage(error: unknown, fallback: string) {
   const data = (error as { response?: { data?: { error?: string } } } | null)?.response?.data;
@@ -237,7 +240,7 @@ async function fetchSettings() {
   try {
     const res = await getSystemSettingsApi();
     const data = res?.data || {};
-    allItems.forEach((item) => {
+    taskItems.forEach((item) => {
       const value = data[item.key] as Partial<TaskSettingValue> | undefined;
       draft[item.key] = {
         enabled: Boolean(value?.enabled),
@@ -268,24 +271,24 @@ async function fetchSettings() {
 }
 
 async function onSubmit() {
-  const invalid = allItems.find((item) => draft[item.key].enabled && !draft[item.key].cron.trim());
-  if (invalid) {
-    MessagePlugin.warning(`请填写「${invalid.name}」的调度周期`);
-    return;
-  }
-  const payload: Record<string, unknown> = Object.fromEntries(
-    allItems
-      .filter((item) => JSON.stringify(draft[item.key]) !== JSON.stringify(saved.value[item.key]))
-      .map((item) => [item.key, draft[item.key]]),
-  );
-  if (retentionDays.value !== savedRetentionDays.value) {
-    if (retentionDays.value !== -1 && retentionDays.value < 1) {
-      MessagePlugin.warning('日志保留天数需不小于 1，-1 表示不清理');
+  if (saving.value) return;
+  // 三个分组各自保存：一次请求只提交当前 tab 的配置，互不影响
+  const tab = activeTab.value;
+  const payload: Record<string, unknown> = {};
+
+  if (tab === 'task') {
+    const invalid = taskItems.find((item) => draft[item.key].enabled && !draft[item.key].cron.trim());
+    if (invalid) {
+      MessagePlugin.warning(`请填写「${invalid.name}」的调度周期`);
       return;
     }
-    payload[retentionKey] = { retention_days: retentionDays.value };
-  }
-  if (JSON.stringify(mailDraft) !== JSON.stringify(savedMail.value)) {
+    taskItems.forEach((item) => {
+      if (JSON.stringify(draft[item.key]) !== JSON.stringify(saved.value[item.key])) {
+        payload[item.key] = draft[item.key];
+      }
+    });
+  } else if (tab === 'mail') {
+    if (!mailDirty.value) return;
     if (mailDraft.enable && !mailDraft.smtp_address.trim()) {
       MessagePlugin.warning('启用邮件时必须填写 SMTP 服务器地址');
       return;
@@ -295,13 +298,31 @@ async function onSubmit() {
       return;
     }
     payload[mailKey] = { ...mailDraft };
+  } else {
+    if (!logDirty.value) return;
+    if (retentionDays.value !== -1 && retentionDays.value < 1) {
+      MessagePlugin.warning('日志保留天数需不小于 1，-1 表示不清理');
+      return;
+    }
+    payload[retentionKey] = { retention_days: retentionDays.value };
   }
+
   if (!Object.keys(payload).length) return;
   saving.value = true;
   try {
     await updateSystemSettingsApi(payload);
-    MessagePlugin.success('系统设置已保存');
-    await fetchSettings();
+    if (tab === 'task') {
+      taskItems.forEach((item) => {
+        saved.value[item.key] = { ...draft[item.key] };
+      });
+    } else if (tab === 'mail') {
+      // 后端不回显密码，保存成功后清空输入框
+      mailDraft.smtp_password = '';
+      savedMail.value = { ...mailDraft };
+    } else {
+      savedRetentionDays.value = retentionDays.value;
+    }
+    MessagePlugin.success('当前设置已保存');
   } catch (error: unknown) {
     console.error(error);
     MessagePlugin.error(getErrorMessage(error, '保存失败'));
@@ -311,11 +332,17 @@ async function onSubmit() {
 }
 
 function onReset() {
-  allItems.forEach((item) => {
-    draft[item.key] = { ...saved.value[item.key] };
-  });
+  if (activeTab.value === 'task') {
+    taskItems.forEach((item) => {
+      draft[item.key] = { ...saved.value[item.key] };
+    });
+    return;
+  }
+  if (activeTab.value === 'mail') {
+    Object.assign(mailDraft, savedMail.value);
+    return;
+  }
   retentionDays.value = savedRetentionDays.value;
-  Object.assign(mailDraft, savedMail.value);
 }
 
 async function onSendTestMail() {

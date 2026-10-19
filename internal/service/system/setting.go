@@ -27,21 +27,26 @@ func GetSettings() (map[string]json.RawMessage, error) {
 		return nil, err
 	}
 	result := make(map[string]json.RawMessage, len(settings))
+	var mailRaw json.RawMessage
 	for _, s := range settings {
+		// 邮件配置单独处理：先不放进结果，确保库中的密文不会透出
+		if s.Key == systemModel.KeyMailSMTP {
+			mailRaw = json.RawMessage(s.Value)
+			continue
+		}
 		result[s.Key] = json.RawMessage(s.Value)
 	}
-	// 邮件密码不返回明文（库中为密文），前端原样回传 MaskedSecret 表示不修改
-	var ms systemModel.MailSetting
-	found, err := syssetting.GetMail(&ms)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		if ms.SMTPPassword != "" {
-			ms.SMTPPassword = systemModel.MaskedSecret
-		}
-		if masked, err := json.Marshal(ms); err == nil {
-			result[systemModel.KeyMailSMTP] = masked
+	// 邮件密码不返回明文或密文：能解析出配置就直接省略密码字段。
+	// 这里不解密，避免密钥不一致时整个设置接口 500。
+	if len(mailRaw) > 0 {
+		var ms systemModel.MailSetting
+		if err := json.Unmarshal(mailRaw, &ms); err != nil {
+			log.Printf("[System] 设置项 %s 解析失败，跳过邮件配置: %v", systemModel.KeyMailSMTP, err)
+		} else {
+			ms.SMTPPassword = ""
+			if view, err := json.Marshal(ms); err == nil {
+				result[systemModel.KeyMailSMTP] = view
+			}
 		}
 	}
 	return result, nil
@@ -95,8 +100,8 @@ func UpdateSettings(values map[string]json.RawMessage) error {
 					return fmt.Errorf("启用邮件时必须填写邮箱账号")
 				}
 			}
-			if mailSetting.SMTPPort == 0 {
-				mailSetting.SMTPPort = systemModel.DefaultSMTPPort
+			if mailSetting.Enable && (mailSetting.SMTPPort < 1 || mailSetting.SMTPPort > 65535) {
+				return fmt.Errorf("启用邮件时，SMTP 端口需在 1-65535 之间")
 			}
 			if !systemModel.ValidSecurity(mailSetting.Security) {
 				return fmt.Errorf("邮件加密方式只能是 none（无）、ssl 或 tls")
@@ -111,6 +116,8 @@ func UpdateSettings(values map[string]json.RawMessage) error {
 		if err := saveTaskSetting(taskSettingKey(taskType), ts); err != nil {
 			return fmt.Errorf("保存设置项 %s 失败: %w", taskType, err)
 		}
+		// 每个任务保存成功后立即应用，避免后续分组保存失败时运行状态与 DB 不一致
+		scheduler.ApplySystemTask(taskType, ts.Enabled, ts.Cron)
 	}
 	if hasRetention {
 		if err := saveRetentionSetting(retentionDays); err != nil {
@@ -122,28 +129,7 @@ func UpdateSettings(values map[string]json.RawMessage) error {
 			return fmt.Errorf("保存设置项 %s 失败: %w", systemModel.KeyMailSMTP, err)
 		}
 	}
-	// 保存成功后再应用到调度器
-	for taskType, ts := range taskUpdates {
-		scheduler.ApplySystemTask(taskType, ts.Enabled, ts.Cron)
-	}
 	return nil
-}
-
-// GetTaskLogRetentionDays 读取日志保留天数，-1 表示不清理
-func GetTaskLogRetentionDays() int {
-	setting, ok := loadSetting(systemModel.KeyTaskLogRetentionDays)
-	if !ok {
-		return systemModel.DefaultTaskLogRetentionDays
-	}
-	var rs systemModel.RetentionSetting
-	if err := json.Unmarshal([]byte(setting.Value), &rs); err != nil {
-		log.Printf("[System] 设置项 %s 解析失败，使用默认值: %v", systemModel.KeyTaskLogRetentionDays, err)
-		return systemModel.DefaultTaskLogRetentionDays
-	}
-	if rs.Days != systemModel.TaskLogRetentionDisabled && rs.Days < 1 {
-		return systemModel.DefaultTaskLogRetentionDays
-	}
-	return rs.Days
 }
 
 // loadSetting 读取设置项，不存在时返回 false（用 Find 避免 gorm 打印 record not found）
@@ -168,9 +154,13 @@ func saveRetentionSetting(days int) error {
 	return postgres.DB.Create(&systemModel.Setting{Key: systemModel.KeyTaskLogRetentionDays, Value: string(raw)}).Error
 }
 
-// saveMailSetting 保存邮件设置；密码为脱敏占位值时保持原密码不变，明文密码落库前加密
+// saveMailSetting 保存邮件设置；密码为空时保持原密码不变，明文密码落库前加密
 func saveMailSetting(ms systemModel.MailSetting) error {
-	if ms.SMTPPassword == systemModel.MaskedSecret || strings.TrimSpace(ms.SMTPPassword) == "" {
+	// 防止把密文再次加密
+	if strings.HasPrefix(ms.SMTPPassword, "gcm:") {
+		return fmt.Errorf("邮件密码不能填写密文，请填写明文密码或留空")
+	}
+	if strings.TrimSpace(ms.SMTPPassword) == "" {
 		var old systemModel.MailSetting
 		found, err := syssetting.GetMail(&old)
 		if err != nil {

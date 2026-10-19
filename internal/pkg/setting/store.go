@@ -12,13 +12,20 @@ import (
 	"octoops/internal/pkg/crypto"
 )
 
-// Get 读取设置项并解析到 dest，不存在或解析失败返回 false
-func Get(key string, dest any) bool {
+// Get 读取设置项并解析到 dest。
+// found 表示记录是否存在；数据库错误与 JSON 解析失败都通过 error 返回，避免被误当成“未配置”。
+func Get(key string, dest any) (found bool, err error) {
 	var row systemModel.Setting
-	if err := postgres.DB.Where("\"key\" = ?", key).Limit(1).Find(&row).Error; err != nil || row.Key == "" {
-		return false
+	if err := postgres.DB.Where("\"key\" = ?", key).Limit(1).Find(&row).Error; err != nil {
+		return false, fmt.Errorf("读取设置项 %s 失败: %w", key, err)
 	}
-	return json.Unmarshal([]byte(row.Value), dest) == nil
+	if row.Key == "" {
+		return false, nil
+	}
+	if err := json.Unmarshal([]byte(row.Value), dest); err != nil {
+		return true, fmt.Errorf("解析设置项 %s 失败: %w", key, err)
+	}
+	return true, nil
 }
 
 // Set 写入设置项，已存在则更新 value
@@ -28,7 +35,11 @@ func Set(key string, value any) error {
 		return err
 	}
 	var row systemModel.Setting
-	if err := postgres.DB.Where("\"key\" = ?", key).Limit(1).Find(&row).Error; err == nil && row.Key != "" {
+	if err := postgres.DB.Where("\"key\" = ?", key).Limit(1).Find(&row).Error; err != nil {
+		// 查询失败时不走 Create，否则会以唯一键冲突掩盖真实的数据库错误
+		return fmt.Errorf("读取设置项 %s 失败: %w", key, err)
+	}
+	if row.Key != "" {
 		return postgres.DB.Model(&systemModel.Setting{}).
 			Where("\"key\" = ?", key).
 			Updates(map[string]interface{}{"value": string(raw), "updated_at": time.Now()}).Error
@@ -42,25 +53,23 @@ func Set(key string, value any) error {
 var (
 	mailCacheMu    sync.RWMutex
 	mailCacheValid bool
-	mailCacheFound bool
 	mailCacheValue systemModel.MailSetting
 )
 
 // loadMailCache 命中缓存时返回配置，未缓存返回 hit=false
-func loadMailCache() (systemModel.MailSetting, bool, bool) {
+func loadMailCache() (systemModel.MailSetting, bool) {
 	mailCacheMu.RLock()
 	defer mailCacheMu.RUnlock()
 	if !mailCacheValid {
-		return systemModel.MailSetting{}, false, false
+		return systemModel.MailSetting{}, false
 	}
-	return mailCacheValue, mailCacheFound, true
+	return mailCacheValue, true
 }
 
-func storeMailCache(ms systemModel.MailSetting, found bool) {
+func storeMailCache(ms systemModel.MailSetting) {
 	mailCacheMu.Lock()
 	defer mailCacheMu.Unlock()
 	mailCacheValue = ms
-	mailCacheFound = found
 	mailCacheValid = true
 }
 
@@ -74,20 +83,20 @@ func InvalidateMailCache() {
 
 // GetMail 读取邮件设置并解密密码，返回该项是否存在
 func GetMail(dest *systemModel.MailSetting) (bool, error) {
-	if cached, found, hit := loadMailCache(); hit {
-		if !found {
-			return false, nil
-		}
+	if cached, hit := loadMailCache(); hit {
 		*dest = cached
 		return true, nil
 	}
-	if !Get(systemModel.KeyMailSMTP, dest) {
-		// 未配置也缓存，避免未启用邮件时每次发信都查库
-		storeMailCache(systemModel.MailSetting{}, false)
+	found, err := Get(systemModel.KeyMailSMTP, dest)
+	if err != nil {
+		return false, fmt.Errorf("读取邮件配置失败: %w", err)
+	}
+	if !found {
+		// 不缓存“未配置”，避免多实例/后续新增配置后本进程一直读不到；读取错误也不缓存
 		return false, nil
 	}
 	if dest.SMTPPassword == "" {
-		storeMailCache(*dest, true)
+		storeMailCache(*dest)
 		return true, nil
 	}
 	plain, err := crypto.DecryptAES(dest.SMTPPassword)
@@ -96,7 +105,7 @@ func GetMail(dest *systemModel.MailSetting) (bool, error) {
 		return true, fmt.Errorf("邮件密码解密失败，请确认 octoops.security.aes_key 与加密时一致: %w", err)
 	}
 	dest.SMTPPassword = plain
-	storeMailCache(*dest, true)
+	storeMailCache(*dest)
 	return true, nil
 }
 
