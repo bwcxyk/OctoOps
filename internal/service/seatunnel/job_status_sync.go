@@ -1,14 +1,15 @@
 package seatunnel
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"octoops/internal/infra/postgres"
 	seatunnelModel "octoops/internal/model/seatunnel"
 )
 
-// SyncAllJobStatus 同步全部实时作业状态，返回执行结果与错误
+// SyncAllJobStatus 同步全部实时作业状态，返回执行结果与错误。
+// 并非所有作业都已提交到 SeaTunnel，查不到（接口返回 200 但没有 jobStatus）属正常情况，只计数不计成败；
+// 只有通信失败、接口返回异常等流程问题才算同步任务失败。
 func SyncAllJobStatus() (string, error) {
 	log.Printf("[Scheduler] 开始同步作业状态")
 	var tasks []seatunnelModel.EtlTask
@@ -16,24 +17,24 @@ func SyncAllJobStatus() (string, error) {
 		return "", fmt.Errorf("查询实时作业失败: %w", err)
 	}
 	synced := 0
+	notFound := 0
 	failed := 0
 	for _, task := range tasks {
 		if task.JobID == nil || *task.JobID == "" {
 			continue
 		}
 		oldStatus := task.JobStatus
-		result, err := QuerySeatunnelJobStatus(*task.JobID)
+		result, found, err := QuerySeatunnelJobStatus(*task.JobID)
 		if err != nil {
 			log.Printf("[Scheduler] 查询作业状态失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
 			failed++
 			continue
 		}
-		status := result.JobStatus
-		if status == "" {
-			log.Printf("[Scheduler] 作业状态为空，跳过更新: taskID=%d, jobId=%s", task.ID, *task.JobID)
-			failed++
+		if !found {
+			notFound++
 			continue
 		}
+		status := result.JobStatus
 		if err := postgres.DB.Model(&task).Update("job_status", status).Error; err != nil {
 			log.Printf("[Scheduler] 更新作业状态失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
 			failed++
@@ -50,12 +51,11 @@ func SyncAllJobStatus() (string, error) {
 		}
 		synced++
 	}
-	log.Printf("[Scheduler] 完成同步作业状态，成功 %d 个，失败 %d 个", synced, failed)
+	log.Printf("[Scheduler] 完成同步作业状态，成功 %d 个，未找到 %d 个，失败 %d 个", synced, notFound, failed)
 	if failed > 0 {
-		msg := fmt.Sprintf("作业状态同步完成：成功 %d 个，失败 %d 个", synced, failed)
-		return msg, errors.New(msg)
+		return "", fmt.Errorf("作业状态同步失败：%d 个作业查询失败", failed)
 	}
-	return fmt.Sprintf("作业状态同步完成，共 %d 个作业", synced), nil
+	return fmt.Sprintf("作业状态同步完成：成功 %d 个，未找到 %d 个", synced, notFound), nil
 }
 
 // SyncJobStatusByTaskID 同步单个任务作业状态并回写数据库
@@ -69,14 +69,14 @@ func SyncJobStatusByTaskID(taskID uint) (string, error) {
 	}
 
 	oldStatus := task.JobStatus
-	result, err := QuerySeatunnelJobStatus(*task.JobID)
+	result, found, err := QuerySeatunnelJobStatus(*task.JobID)
 	if err != nil {
 		return "", err
 	}
-	status := result.JobStatus
-	if status == "" {
-		return "", fmt.Errorf("SeaTunnel 响应缺少 jobStatus")
+	if !found {
+		return "", fmt.Errorf("SeaTunnel 上未找到作业 %s", *task.JobID)
 	}
+	status := result.JobStatus
 
 	updates := map[string]interface{}{
 		"job_status": status,
