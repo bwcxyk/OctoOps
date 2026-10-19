@@ -155,6 +155,9 @@ func InitConfig() error {
 	SeatunnelRequestTimeout = time.Duration(cfg.Seatunnel.RequestTimeout) * time.Second
 	PostgresDSN = cfg.Postgres.DSN()
 	aesKey = cfg.Octoops.Security.AesKey
+	if len(aesKey) != 32 {
+		return fmt.Errorf("octoops.security.aes_key 必须为 32 字节（AES-256），当前为 %d 字节", len(aesKey))
+	}
 	jwtSecret = cfg.Octoops.Auth.JWTSecret
 	serverPort = cfg.Octoops.Server.Port
 	redisConfig = cfg.Octoops.Redis
