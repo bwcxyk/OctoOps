@@ -138,6 +138,13 @@ function syncValueToEditor(value: string) {
   if (model.getValue() === value)
     return;
 
+  // 只读模式下 monaco 的 executeEdits 会直接被忽略（read only editor => sorry!），
+  // 必须直接写入 model，否则外部更新不会生效
+  if (props.readonly) {
+    model.setValue(value);
+    return;
+  }
+
   editor.executeEdits('external-update', [
     {
       range: model.getFullModelRange(),

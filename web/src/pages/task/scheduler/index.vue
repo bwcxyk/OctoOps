@@ -26,7 +26,7 @@
       <div class="toolbar">
         <t-select v-model="taskTypeFilter" clearable placeholder="任务类型" style="width: 160px">
           <t-option label="ETL任务" value="etl" />
-          <t-option label="自定义任务" value="custom" />
+          <t-option label="系统任务" value="system" />
         </t-select>
       </div>
 
@@ -34,7 +34,7 @@
         <template #index="{ rowIndex }">{{ rowIndex + 1 + (page - 1) * pageSize }}</template>
         <template #task_type="{ row }">
           <t-tag :theme="row.task_type === 'etl' ? 'success' : 'primary'" variant="light">
-            {{ row.task_type === 'etl' ? 'ETL任务' : '自定义任务' }}
+            {{ row.task_type === 'etl' ? 'ETL任务' : '系统任务' }}
           </t-tag>
         </template>
         <template #next_run="{ row }">{{ formatDateTime(row.next_run) }}</template>

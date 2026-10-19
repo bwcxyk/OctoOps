@@ -239,20 +239,25 @@ async function onStatusChange(row: SeatunnelTask, status: 0 | 1) {
 }
 
 function onManualExecute(task: SeatunnelTask) {
+  let executing = false;
   const dialog = DialogPlugin.confirm({
     header: '确认执行',
     body: `确定要手动执行任务「${task.name}」吗？`,
-    confirmBtn: '确定',
+    confirmBtn: { content: '确定', theme: 'primary', loading: false },
     cancelBtn: '取消',
     onConfirm: async () => {
+      if (executing) return;
+      executing = true;
+      dialog.setConfirmLoading(true);
       try {
         await submitJobApi({ id: task.id });
         MessagePlugin.success('手动执行成功');
         await fetchTasks();
       } catch (error: unknown) {
         console.error(error);
-        MessagePlugin.error(error instanceof Error ? error.message : '手动执行失败');
+        MessagePlugin.error('手动执行失败');
       } finally {
+        executing = false;
         dialog.destroy();
       }
     },

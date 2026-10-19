@@ -1,29 +1,14 @@
 import { request } from '@/utils/request';
 
-import type { CustomTaskListResult, SchedulerStatusResult } from './model/taskModel';
+import type { SchedulerStatusResult } from './model/taskModel';
 
 const Api = {
-  CustomTasks: '/task/custom',
   SchedulerStatus: '/task/scheduler/status',
   SchedulerReload: '/task/scheduler/reload',
   SchedulerStart: '/task/scheduler/start',
   SchedulerStop: '/task/scheduler/stop',
   TaskLogs: '/task/log',
 };
-
-export function getCustomTasksApi(params: { page: number; page_size: number }) {
-  return request.get<CustomTaskListResult>(
-    { url: Api.CustomTasks, params },
-    { isTransformResponse: false },
-  );
-}
-
-export function updateCustomTaskApi(id: number, data: Record<string, unknown>) {
-  return request.put(
-    { url: `${Api.CustomTasks}/${id}`, data },
-    { isTransformResponse: false },
-  );
-}
 
 export function getSchedulerStatusApi() {
   return request.get<SchedulerStatusResult>(
