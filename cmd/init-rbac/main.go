@@ -232,9 +232,9 @@ func createMenuLikePermissions() (map[string]*model.Permission, error) {
 		{Name: "创建", Code: "rbac:permission:create", Description: "创建权限", Type: "api", Path: "/api/permissions", Method: "POST", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
 		{Name: "更新", Code: "rbac:permission:update", Description: "更新权限", Type: "api", Path: "/api/permissions/:id", Method: "PUT", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
 		{Name: "删除", Code: "rbac:permission:delete", Description: "删除权限", Type: "api", Path: "/api/permissions/:id", Method: "DELETE", Status: 1, ParentID: subMenuMap["rbac:permission"].ID},
-		// 系统设置
-		{Name: "查看", Code: "system:setting:read", Description: "查看系统任务设置", Type: "api", Path: "/api/system/tasks", Method: "GET", Status: 1, ParentID: subMenuMap["system:setting"].ID},
-		{Name: "更新", Code: "system:setting:update", Description: "更新系统任务设置", Type: "api", Path: "/api/system/tasks/:type", Method: "PUT", Status: 1, ParentID: subMenuMap["system:setting"].ID},
+		// 系统设置（update 同时保护 PUT /settings 与 POST /settings/mail/test，这里记录主路由）
+		{Name: "查看", Code: "system:setting:read", Description: "查看系统设置", Type: "api", Path: "/api/system/settings", Method: "GET", Status: 1, ParentID: subMenuMap["system:setting"].ID},
+		{Name: "更新", Code: "system:setting:update", Description: "更新系统设置", Type: "api", Path: "/api/system/settings", Method: "PUT", Status: 1, ParentID: subMenuMap["system:setting"].ID},
 	}
 
 	permissionMap := make(map[string]*model.Permission)
@@ -367,7 +367,6 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			// 任务中心 API
 			"task:scheduler", "task:scheduler:status",
 			"task:log", "task:log:read",
-			"system:setting", "system:setting:read", "system:setting:update",
 		}
 		if err := assignRolePermissions("操作员", operator, permissions, operatorPermissions); err != nil {
 			return err
