@@ -15,33 +15,19 @@ import (
 
 // SystemTaskDef 系统内置任务定义，新增系统任务在这里登记即可
 type SystemTaskDef struct {
-	Type        string
-	Name        string
-	Description string
-	DefaultCron string
-	DefaultOn   bool
+	Type string
+	Name string
 }
 
 var systemTaskDefs = []SystemTaskDef{
 	{
-		Type:        "job_status_sync",
-		Name:        "ETL 实时作业状态同步",
-		Description: "定时同步 SeaTunnel 实时作业的运行状态",
-		DefaultCron: "0 */10 * * * *",
-		DefaultOn:   false,
+		Type: "job_status_sync",
+		Name: "ETL 实时作业状态同步",
 	},
 	{
-		Type:        "ecs_sg_sync",
-		Name:        "ECS 安全组同步",
-		Description: "定时同步阿里云 ECS 安全组规则",
-		DefaultCron: "0 0 8 * * *",
-		DefaultOn:   false,
+		Type: "ecs_sg_sync",
+		Name: "ECS 安全组同步",
 	},
-}
-
-// SystemTaskDefs 返回系统任务清单（副本）
-func SystemTaskDefs() []SystemTaskDef {
-	return append([]SystemTaskDef(nil), systemTaskDefs...)
 }
 
 // SystemTaskDefByType 按类型查找系统任务定义
@@ -142,11 +128,16 @@ func registerSystemTask(def SystemTaskDef, cronExpr string) bool {
 	mapsMu.Lock()
 	systemTasks[def.Type] = task
 	mapsMu.Unlock()
-	addSystemTaskToCron(task)
+	if !addSystemTaskToCron(task) {
+		mapsMu.Lock()
+		delete(systemTasks, def.Type)
+		mapsMu.Unlock()
+		return false
+	}
 	return true
 }
 
-func addSystemTaskToCron(task *SystemTask) {
+func addSystemTaskToCron(task *SystemTask) bool {
 	jobFunc := func() {
 		if !schedulerRunning.Load() {
 			return
@@ -172,17 +163,19 @@ func addSystemTaskToCron(task *SystemTask) {
 		}
 		mapsMu.Unlock()
 
-		postgres.DB.Create(&taskModel.TaskLog{
+		if err := postgres.DB.Create(&taskModel.TaskLog{
 			TaskName: task.Name,
 			TaskType: taskModel.TaskTypeSystem,
 			Result:   result,
 			Status:   status,
-		})
+		}).Error; err != nil {
+			log.Printf("[Scheduler][系统任务] 写入任务日志失败 type=%s, err=%v", task.Type, err)
+		}
 	}
 	entryID, err := cronScheduler.AddFunc(task.Spec, jobFunc)
 	if err != nil {
 		log.Printf("[Scheduler][系统任务] 添加失败 type=%s, name=%s, cron=%s, err=%v", task.Type, task.Name, task.Spec, err)
-		return
+		return false
 	}
 	mapsMu.Lock()
 	task.EntryID = entryID
@@ -193,6 +186,7 @@ func addSystemTaskToCron(task *SystemTask) {
 		"[Scheduler][系统任务] 添加成功 type=%s, name=%s, cron=%s, nextRun=%s",
 		task.Type, task.Name, task.Spec, task.NextRun.Format("2006-01-02 15:04:05"),
 	)
+	return true
 }
 
 // GetJobFuncByType 返回系统任务的执行函数，返回展示结果与错误

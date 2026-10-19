@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"log"
 	"octoops/internal/infra/postgres"
 	systemModel "octoops/internal/model/system"
@@ -38,22 +39,29 @@ func registerMaintenanceTasks() {
 	CleanupTaskLogs()
 }
 
-// taskLogRetentionDays 从系统设置读取保留天数
-// 与 service/system 保持同样的解析规则：调度器不能被 service/system 反向依赖，这里直接读设置表
-func taskLogRetentionDays() int {
+// taskLogRetentionDays 从系统设置读取保留天数；读取或解析失败返回 error，调用方应跳过清理
+func taskLogRetentionDays() (int, error) {
 	var rs systemModel.RetentionSetting
-	if !syssetting.Get(systemModel.KeyTaskLogRetentionDays, &rs) {
-		return systemModel.DefaultTaskLogRetentionDays
+	found, err := syssetting.Get(systemModel.KeyTaskLogRetentionDays, &rs)
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return systemModel.DefaultTaskLogRetentionDays, nil
 	}
 	if rs.Days != systemModel.TaskLogRetentionDisabled && rs.Days < 1 {
-		return systemModel.DefaultTaskLogRetentionDays
+		return 0, fmt.Errorf("日志保留天数不合法: %d", rs.Days)
 	}
-	return rs.Days
+	return rs.Days, nil
 }
 
-// CleanupTaskLogs 按保留天数清理任务日志，-1 表示不清理
+// CleanupTaskLogs 按保留天数清理任务日志，-1 表示不清理；设置读取/解析失败时跳过，避免误删
 func CleanupTaskLogs() {
-	days := taskLogRetentionDays()
+	days, err := taskLogRetentionDays()
+	if err != nil {
+		log.Printf("[任务日志清理] 读取保留天数失败，跳过本次清理: %v", err)
+		return
+	}
 	if days == systemModel.TaskLogRetentionDisabled {
 		log.Printf("[任务日志清理] 未开启（保留天数为 -1），跳过")
 		return
