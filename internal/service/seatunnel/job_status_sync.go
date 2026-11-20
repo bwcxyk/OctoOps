@@ -8,7 +8,7 @@ import (
 )
 
 // SyncAllJobStatus 同步全部实时作业状态，返回执行结果与错误。
-// 并非所有作业都已提交到 SeaTunnel，查不到（接口返回 200 但没有 jobStatus）属正常情况，只计数不计成败；
+// SeaTunnel 上查不到的作业（未提交或重启后记录丢失，接口仍返回 200）只计数，不算失败；
 // 只有通信失败、接口返回异常等流程问题才算同步任务失败。
 func SyncAllJobStatus() (string, error) {
 	log.Printf("[Scheduler] 开始同步作业状态")
@@ -32,6 +32,14 @@ func SyncAllJobStatus() (string, error) {
 		}
 		if !found {
 			notFound++
+			// SeaTunnel 上已没有这个作业：RUNNING 和空状态改成 UNKNOWN（界面显示未知，允许重新提交）；
+			// FINISHED/FAILED/CANCEL 是之前查到的真实结果，保留不动
+			if task.JobStatus == "RUNNING" || task.JobStatus == "" {
+				if err := postgres.DB.Model(&task).Update("job_status", "UNKNOWN").Error; err != nil {
+					log.Printf("[Scheduler] 标记作业状态为未知失败: taskID=%d, jobId=%s, error=%v", task.ID, *task.JobID, err)
+					failed++
+				}
+			}
 			continue
 		}
 		status := result.JobStatus
@@ -53,7 +61,7 @@ func SyncAllJobStatus() (string, error) {
 	}
 	log.Printf("[Scheduler] 完成同步作业状态，成功 %d 个，未找到 %d 个，失败 %d 个", synced, notFound, failed)
 	if failed > 0 {
-		return "", fmt.Errorf("作业状态同步失败：%d 个作业查询失败", failed)
+		return "", fmt.Errorf("作业状态同步失败：%d 个作业未能同步", failed)
 	}
 	return fmt.Sprintf("作业状态同步完成：成功 %d 个，未找到 %d 个", synced, notFound), nil
 }

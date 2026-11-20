@@ -382,8 +382,6 @@ func assignPermissionsToRoles(roles map[string]*model.Role, permissions map[stri
 			"notify:group:read",
 			// 任务管理
 			"task:log", "task:log:read",
-			// 系统设置
-			"system:setting", "system:setting:read",
 		}
 		if err := assignRolePermissions("观察者", observer, permissions, observerPermissions); err != nil {
 			return err
